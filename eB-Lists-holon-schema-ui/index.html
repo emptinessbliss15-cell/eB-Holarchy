@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>eB Lists</title>
+    <link rel="icon" type="image/x-icon" href="./img/favicon">
+    <link rel="icon" type="image/png" sizes="48x48" href="./img/favicon48.png">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="./vendor/vanillagrid.css">
+    <link rel="stylesheet" href="./vendor/hcg-autocomplete.css">
+    <link rel="stylesheet" href="./app.css">
+</head>
+<body>
+    <div id="shell" class="eb-shell">
+        <div id="header"></div>
+        <div id="status"></div>
+        <main class="eb-main">
+            <section id="app" class="card" hidden>
+                <div class="workspace-grid">
+                    <section class="panel holon-workspace">
+                        <div class="panel-heading">
+                            <div class="graph-context">
+                                <label for="graphRoot">Root</label>
+                                <input id="graphRoot" type="text" autocomplete="off" placeholder="Choose a root Holon…" aria-label="Graph root Holon">
+                            </div>
+                            <div class="panel-actions">
+                                <button id="newHolon" type="button">+ Holon</button>
+                                <button id="newRelationship" type="button">+ Relationship</button>
+                                <button id="newHolonType" type="button">+ Type</button>
+                            </div>
+                        </div>
+                        <div id="holonGraph" aria-label="Holarchy graph"></div>
+                    </section>
+                    <aside id="propertyEditor" class="panel property-editor" hidden aria-label="Holon properties">
+                        <div class="property-editor-heading">
+                            <h3 id="propertyEditorTitle">Holon</h3>
+                            <button id="propertyEditorClose" type="button" aria-label="Close property editor">×</button>
+                        </div>
+                        <div data-property-grid aria-label="Holon properties"></div>
+                    </aside>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="./vendor/vanillagrid.js"></script>
+    <script src="./vendor/hcg-autocomplete.js"></script>
+    <script src="./vendor/cytoscape.min.js"></script>
+    <script type="module">
+        const header = document.getElementById('header');
+        const response = await fetch(`./header.html?v=${Date.now()}`, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`Unable to load header: ${response.status}`);
+        header.outerHTML = await response.text();
+        const logoMenu = document.querySelector('.eb-logo-menu');
+        document.addEventListener('click', event => {
+            if (!logoMenu?.open || logoMenu.contains(event.target)) return;
+            logoMenu.removeAttribute('open');
+        });
+        await import('./eBStatus.js').then(({ eBStatus }) => { eBStatus.init(); window.ebStatus = eBStatus; });
+        await import('./CFstatus.js').then(({ CFstatus }) => { window.ebCFStatus = CFstatus.init(); });
+        await import('./appGraph.js');
+        await import('./propertyEditor.js').then(({ initPropertyEditor }) => initPropertyEditor());
+    </script>
+</body>
+</html>
