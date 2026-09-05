@@ -11,6 +11,20 @@ let depthListenerInstalled = false;
 let provenanceListenerInstalled = false;
 let navigationInstalled = false;
 
+const GRAPH_DEPTH_STORAGE_KEY = 'eB-Holarchy.graphDepth';
+
+function readPersistedDepth() {
+  try {
+    const value = localStorage.getItem(GRAPH_DEPTH_STORAGE_KEY);
+    if (value === 'all' || ['1', '2', '3', '4'].includes(value)) return value;
+  } catch (_) {}
+  return null;
+}
+
+function persistDepth(value) {
+  try { localStorage.setItem(GRAPH_DEPTH_STORAGE_KEY, String(value)); } catch (_) {}
+}
+
 function installStyles() {
   if (document.getElementById('holon-graph-style')) return;
   const style = document.createElement('style');
@@ -199,8 +213,15 @@ function installDepthControl() {
   if (depthListenerInstalled) return;
   const control = document.getElementById('graphDepth');
   if (!control) return;
-  currentDepth = control.value || 2;
-  control.addEventListener('change', () => { currentDepth = control.value || 2; render(); });
+  const persisted = readPersistedDepth();
+  currentDepth = persisted || control.value || 2;
+  control.value = String(currentDepth);
+  control.addEventListener('change', () => {
+    currentDepth = control.value || 2;
+    persistDepth(currentDepth);
+    render();
+  });
+  persistDepth(currentDepth);
   depthListenerInstalled = true;
 }
 
@@ -249,7 +270,13 @@ export function getGraphRoot() { return currentRootId; }
 
 export function getGraphParent() { return graphParentId(); }
 
-export function setGraphDepth(depth) { currentDepth = depth || 'all'; render(); }
+export function setGraphDepth(depth) {
+  currentDepth = depth || 'all';
+  persistDepth(currentDepth);
+  const control = document.getElementById('graphDepth');
+  if (control) control.value = String(currentDepth);
+  render();
+}
 export function setGraphProvenance(enabled) { showProvenance = Boolean(enabled); const control = document.getElementById('graphProvenance'); if (control) control.checked = showProvenance; render(); }
 export function updateHolonGraph(model) { if (!cy) return; currentModel = model || { holons: [], relationships: [], relationshipTypes: [] }; if (currentRootId && !currentModel.holons.some(h => String(h.id) === String(currentRootId))) currentRootId = null; render(); }
 export function destroyHolonGraph() { cy?.destroy(); cy = null; currentRootId = null; selectionHandler = null; currentModel = { holons: [], relationships: [], relationshipTypes: [] }; }
