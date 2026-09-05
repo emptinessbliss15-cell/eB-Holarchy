@@ -177,9 +177,9 @@ function refreshGraphRootCombo() {
   graphRootCombo = createEBComboBox(elements.graphRoot, {
     source: holonComboOptions(holons), minChars: 0, clearable: true,
     placeholder: 'Choose a root Holon…',
-    onChange: value => setGraphRoot((Array.isArray(value) ? value[0] : value) || null),
-    onSelect: value => {
-      const rootId = typeof value === 'object' ? value?.value : value;
+    onChange: (_input, value) => setGraphRoot(value || null),
+    onSelect: (_input, item) => {
+      const rootId = item?.value;
       if (rootId) setGraphRoot(rootId);
     },
   });
@@ -301,28 +301,17 @@ async function applySession(session) {
   if (user) return loadModel();
   holons = []; relationships = []; relationshipTypes = []; holonTypes = [];
   destroyHolonGraph(); graph = null; graphRootCombo?.destroy?.(); graphRootCombo = null;
-  renderHolonInspector(null);
-  setStatus('Sign in to open the Holon Workspace');
+  if (elements.inspectorContent) elements.inspectorContent.replaceChildren();
 }
 
-window.addEventListener('holon:selected', event => {
-  const holon = event.detail || null;
-  renderHolonInspector(holon);
-  if (!holon) return;
-  const node = graph?.nodes?.(`[id = "${String(holon.id).replaceAll('"', '\\"')}"]`);
-  node?.select();
-  if (node?.nonempty?.()) graph.center(node);
-});
+initAuth({ element: elements.auth, onSession: applySession });
 
 elements.refresh?.addEventListener('click', loadModel);
+elements.refreshApp?.addEventListener('click', () => window.location.reload());
+elements.debugApp?.addEventListener('click', () => debugger);
 elements.newHolon?.addEventListener('click', () => createHolon());
 elements.newRelationship?.addEventListener('click', createRelationship);
 elements.newHolonType?.addEventListener('click', createHolonType);
-elements.refreshApp?.addEventListener('click', () => location.reload());
-elements.debugApp?.addEventListener('click', () => { setStatus('Debugger paused', 'warn'); debugger; });
-elements.testStatusSuccess?.addEventListener('click', () => setStatus('Test success message', 'success'));
-elements.testStatusWarn?.addEventListener('click', () => setStatus('Test warning message', 'warn'));
-elements.testStatusError?.addEventListener('click', () => setStatus('Test error message', 'error'));
-
-const authResult = initAuth({ api: eBliss, container: elements.auth, setStatus, onSession: applySession });
-authResult.then(({ data, error }) => { if (error) setStatus(error.message, 'error'); else applySession(data.session); });
+elements.testStatusSuccess?.addEventListener('click', () => setStatus('Success test', 'success'));
+elements.testStatusWarn?.addEventListener('click', () => setStatus('Warning test', 'warn'));
+elements.testStatusError?.addEventListener('click', () => setStatus('Error test', 'error'));
