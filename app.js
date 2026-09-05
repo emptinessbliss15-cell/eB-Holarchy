@@ -304,7 +304,7 @@ async function applySession(session) {
   if (elements.inspectorContent) elements.inspectorContent.replaceChildren();
 }
 
-initAuth({ element: elements.auth, onSession: applySession });
+initAuth({ container: elements.auth, onSession: applySession, setStatus });
 
 elements.refresh?.addEventListener('click', loadModel);
 elements.refreshApp?.addEventListener('click', () => window.location.reload());
