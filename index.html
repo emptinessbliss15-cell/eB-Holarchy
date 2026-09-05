@@ -24,8 +24,15 @@
         .holon-property-table th, .holon-property-table td { padding: 7px 6px; border-bottom: 1px solid var(--eb-border); text-align: left; vertical-align: top; overflow-wrap: anywhere; }
         .holon-property-table th { width: 38%; font-size: 12px; opacity: .7; font-weight: 600; }
         .holon-property-table td { white-space: pre-wrap; font-size: 13px; }
+        .holarchy-filter { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: 2px; }
+        .holarchy-filter-field { display: flex; align-items: center; gap: 5px; }
+        .holarchy-filter-field > span { font-size: 12px; font-weight: 600; opacity: .72; }
+        .holarchy-filter #graphRoot { width: 220px; }
+        .holarchy-filter #graphDepth { min-width: 64px; }
         @media (max-width: 760px) {
             .workspace-primary { grid-template-columns: 1fr; }
+            .holarchy-filter { margin-left: 0; width: 100%; }
+            .holarchy-filter #graphRoot { width: 100%; min-width: 180px; }
         }
     </style>
 </head>
@@ -39,22 +46,24 @@
                 <div class="workspace-grid workspace-primary">
                     <section class="panel panel-graph">
                         <div class="panel-heading">
-                            <h3>Holarchy</h3>
-                            <div class="panel-actions">
-                                <label>
-                                    Root
-                                    <input id="graphRoot" type="text" autocomplete="off" aria-label="Holarchy graph root" placeholder="Choose a root Holon…">
-                                </label>
-                                <label>
-                                    Depth
-                                    <select id="graphDepth" aria-label="Holarchy graph depth">
-                                        <option value="1">1</option>
-                                        <option value="2" selected>2</option>
-                                        <option value="3">3</option>
-                                        <option value="4">4</option>
-                                        <option value="all">∞</option>
-                                    </select>
-                                </label>
+                            <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+                                <h3 style="margin:0;white-space:nowrap;">Holarchy</h3>
+                                <div class="holarchy-filter" role="group" aria-label="Holarchy filters">
+                                    <div class="holarchy-filter-field">
+                                        <span>Root</span>
+                                        <input id="graphRoot" type="text" autocomplete="off" aria-label="Holarchy graph root" placeholder="Choose a root Holon…">
+                                    </div>
+                                    <div class="holarchy-filter-field">
+                                        <span>Depth</span>
+                                        <select id="graphDepth" aria-label="Holarchy graph depth">
+                                            <option value="1">1</option>
+                                            <option value="2" selected>2</option>
+                                            <option value="3">3</option>
+                                            <option value="4">4</option>
+                                            <option value="all">∞</option>
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div id="holonGraph" aria-label="Holon relationship graph"></div>
