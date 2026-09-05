@@ -17,63 +17,60 @@
         <div id="header"></div>
         <div id="status"></div>
 
-        <div class="eb-navigation">
-            <nav class="eb-tree" aria-label="Holon tree">
-                <div class="tree-controls">
-                    <label>
-                        Root
-                        <select id="treeRoot"></select>
-                    </label>
-                    <label>
-                        Relationship
-                        <select id="treeRelationship"></select>
-                    </label>
+        <main class="eb-main">
+            <section id="app" class="card" hidden>
+                <div class="workspace-grid workspace-primary">
+                    <section class="panel panel-graph">
+                        <div class="panel-heading">
+                            <h3>Holarchy</h3>
+                            <div class="panel-actions">
+                                <label>
+                                    Root
+                                    <select id="graphRoot" aria-label="Holarchy graph root"></select>
+                                </label>
+                                <label>
+                                    Depth
+                                    <select id="graphDepth" aria-label="Holarchy graph depth">
+                                        <option value="1">1</option>
+                                        <option value="2" selected>2</option>
+                                        <option value="3">3</option>
+                                        <option value="4">4</option>
+                                        <option value="all">∞</option>
+                                    </select>
+                                </label>
+                            </div>
+                        </div>
+                        <div id="holonGraph" aria-label="Holon relationship graph"></div>
+                    </section>
+
+                    <aside id="holonInspector" class="panel holon-inspector" aria-label="Holon properties">
+                        <div class="panel-heading">
+                            <h3>Holon Properties</h3>
+                        </div>
+                        <div id="holonInspectorContent" class="muted">Select a Holon to inspect its properties.</div>
+                    </aside>
                 </div>
-                <div id="treeGrid" aria-label="Holon tree"></div>
-            </nav>
 
-            <main class="eb-main">
-                <section id="app" class="card" hidden>
-                    <div class="workspace-grid">
-                        <section class="panel panel-graph">
-                            <div class="panel-heading">
-                                <h3>Holarchy</h3>
-                                <div class="panel-actions">
-                                    <label>
-                                        Depth
-                                        <select id="graphDepth" aria-label="Holarchy graph depth">
-                                            <option value="1">1</option>
-                                            <option value="2" selected>2</option>
-                                            <option value="3">3</option>
-                                            <option value="4">4</option>
-                                            <option value="all">∞</option>
-                                        </select>
-                                    </label>
-                                    <div class="muted">Click a Holon to center it</div>
-                                </div>
+                <div class="workspace-grid workspace-grids">
+                    <section class="panel">
+                        <div class="panel-heading">
+                            <h3>Holons</h3>
+                            <div class="panel-actions">
+                                <button id="newHolon" type="button">+ Holon</button>
+                                <button id="newHolonType" type="button">+ Type</button>
                             </div>
-                            <div id="holonGraph" aria-label="Holon relationship graph"></div>
-                        </section>
-                        <section class="panel">
-                            <div class="panel-heading">
-                                <h3>Holons</h3>
-                                <div class="panel-actions">
-                                    <button id="newHolon" type="button">+ Holon</button>
-                                    <button id="newHolonType" type="button">+ Type</button>
-                                </div>
-                            </div>
-                            <div id="grid" aria-label="Holons"></div>
-                        </section>
+                        </div>
+                        <div id="grid" aria-label="Holons"></div>
+                    </section>
 
-                        <section class="panel">
-                            <h3 id="activeList">Relationships</h3>
-                            <div class="muted" id="listMode"></div>
-                            <div id="detailGrid" aria-label="Relationships"></div>
-                        </section>
-                    </div>
-                </section>
-            </main>
-        </div>
+                    <section class="panel">
+                        <h3 id="activeList">Relationships</h3>
+                        <div class="muted" id="listMode"></div>
+                        <div id="detailGrid" aria-label="Relationships"></div>
+                    </section>
+                </div>
+            </section>
+        </main>
     </div>
 
     <script src="./vendor/vanillagrid.js"></script>
