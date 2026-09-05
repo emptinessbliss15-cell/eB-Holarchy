@@ -4,7 +4,9 @@
 let cy = null;
 let currentModel = { holons: [], relationships: [], relationshipTypes: [] };
 let currentRootId = null;
+let currentDepth = 2;
 let selectionHandler = null;
+let depthListenerInstalled = false;
 
 function installStyles() {
   if (document.getElementById('holon-graph-style')) return;
@@ -31,18 +33,29 @@ function relationshipLabel(relationship, relationshipTypes) {
 
 function descendants(rootId, holons, relationships) {
   if (!rootId) return holons;
-  const visible = new Set([String(rootId)]);
-  let changed = true;
-  while (changed) {
-    changed = false;
+
+  // Relationships are stored child/source -> parent/target. Starting at the
+  // selected root, walk outward through children, but stop at the requested
+  // graph depth so a large Holarchy does not become one giant graph.
+  const root = String(rootId);
+  const distance = new Map([[root, 0]]);
+  const queue = [root];
+
+  while (queue.length) {
+    const current = queue.shift();
+    const depth = distance.get(current);
+    if (currentDepth !== 'all' && depth >= Number(currentDepth)) continue;
+
     for (const relationship of relationships) {
-      if (visible.has(String(relationship.target_holon_id)) && !visible.has(String(relationship.source_holon_id))) {
-        visible.add(String(relationship.source_holon_id));
-        changed = true;
-      }
+      if (String(relationship.target_holon_id) !== current) continue;
+      const child = String(relationship.source_holon_id);
+      if (distance.has(child)) continue;
+      distance.set(child, depth + 1);
+      queue.push(child);
     }
   }
-  return holons.filter(holon => visible.has(String(holon.id)));
+
+  return holons.filter(holon => distance.has(String(holon.id)));
 }
 
 function visibleModel() {
@@ -77,10 +90,23 @@ function render() {
   cy.layout({ name: 'cose', animate: false, fit: true, padding: 40 }).run();
 }
 
+function installDepthControl() {
+  if (depthListenerInstalled) return;
+  const control = document.getElementById('graphDepth');
+  if (!control) return;
+  currentDepth = control.value || 2;
+  control.addEventListener('change', () => {
+    currentDepth = control.value || 2;
+    render();
+  });
+  depthListenerInstalled = true;
+}
+
 export function createHolonGraph({ element, holons, relationships, relationshipTypes = [], rootId = null, onSelect = null }) {
   if (!element) return null;
   if (!window.cytoscape) throw new Error('Cytoscape is not loaded');
   installStyles();
+  installDepthControl();
   cy?.destroy();
   selectionHandler = onSelect;
   currentModel = { holons, relationships, relationshipTypes };
@@ -89,7 +115,8 @@ export function createHolonGraph({ element, holons, relationships, relationshipT
   const surface = dark ? '#242424' : '#fff';
   const text = dark ? '#eeeeee' : '#222';
   const edge = dark ? '#aaaaaa' : '#777';
-  cy = window.cytoscape({ container: element, elements: buildElements(...Object.values(visibleModel())), layout: { name: 'cose', animate: false, fit: true, padding: 40 }, minZoom: 0.2, maxZoom: 3, wheelSensitivity: 0.25,
+  const model = visibleModel();
+  cy = window.cytoscape({ container: element, elements: buildElements(model.holons, model.relationships, model.relationshipTypes), layout: { name: 'cose', animate: false, fit: true, padding: 40 }, minZoom: 0.2, maxZoom: 3, wheelSensitivity: 0.25,
     style: [
       { selector: 'node', style: { label: 'data(label)', 'text-valign': 'center', 'text-halign': 'center', 'background-color': '#5b8def', color: '#fff', 'font-size': 13, 'font-weight': 600, 'text-wrap': 'wrap', 'text-max-width': 110, width: 'label', height: 'label', padding: '14px', shape: 'roundrectangle', 'border-width': 2, 'border-color': '#3769c5' } },
       { selector: 'node:selected', style: { 'background-color': '#f59e0b', 'border-color': '#b45309', 'border-width': 3 } },
@@ -98,12 +125,24 @@ export function createHolonGraph({ element, holons, relationships, relationshipT
     ],
   });
 
-  // Use Cytoscape's direct node event. The Holon ID is resolved back through
-  // the app model rather than relying on an object stored in Cytoscape data.
+  // Single click selects/inspects. Double-click makes the Holon the new
+  // graph root, which provides the outward-travel interaction without
+  // sacrificing the inspector click behavior.
   cy.on('tap', 'node', event => {
     const id = String(event.target.data('holonId'));
     const holon = currentModel.holons.find(item => String(item.id) === id) || null;
     emitSelection(holon);
+  });
+  cy.on('dbltap', 'node', event => {
+    const id = String(event.target.data('holonId'));
+    if (!currentModel.holons.some(item => String(item.id) === id)) return;
+    currentRootId = id;
+    const control = document.getElementById('graphRoot');
+    if (control) control.value = currentModel.holons.find(item => String(item.id) === id)?.name || '';
+    render();
+    const node = cy.nodes(`[id = "${id.replaceAll('"', '\\"')}"]`);
+    node.select();
+    emitSelection(currentModel.holons.find(item => String(item.id) === id) || null);
   });
   cy.on('click', 'node', event => {
     const id = String(event.target.data('holonId'));
@@ -115,6 +154,7 @@ export function createHolonGraph({ element, holons, relationships, relationshipT
 }
 
 export function setGraphRoot(rootId) { currentRootId = rootId || null; render(); }
+export function setGraphDepth(depth) { currentDepth = depth || 'all'; render(); }
 
 export function updateHolonGraph(model) {
   if (!cy) return;
