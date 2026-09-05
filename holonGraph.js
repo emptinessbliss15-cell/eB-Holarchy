@@ -52,30 +52,44 @@ function relationshipLabel(relationship, relationshipTypes) {
   return relationship.relationship_type || relationship.relationship_type_name || relationshipTypes.find(type => type.id === relationship.relationship_type_id)?.name || 'relationship';
 }
 
-function descendants(rootId, holons, relationships) {
+// Return every Holon within N relationship hops of the root.
+// This is intentionally direction-agnostic: a relationship does not imply
+// parent/child hierarchy. Direction remains visible on the Cytoscape edge,
+// but traversal treats both endpoints as neighbors.
+function relatedWithinDepth(rootId, holons, relationships) {
   if (!rootId) return holons;
   const root = String(rootId);
   if (!holons.some(holon => String(holon.id) === root)) return [];
+
   const distance = new Map([[root, 0]]);
   const queue = [root];
+
   while (queue.length) {
     const current = queue.shift();
     const depth = distance.get(current);
     if (currentDepth !== 'all' && depth >= Number(currentDepth)) continue;
+
     for (const relationship of relationships) {
-      // Holarchy relationships store the child as source and its parent as target.
-      if (String(relationship.target_holon_id) !== current) continue;
-      const child = String(relationship.source_holon_id);
-      if (distance.has(child)) continue;
-      distance.set(child, depth + 1);
-      queue.push(child);
+      const source = String(relationship.source_holon_id ?? '');
+      const target = String(relationship.target_holon_id ?? '');
+      let neighbor = null;
+
+      if (source === current) neighbor = target;
+      else if (target === current) neighbor = source;
+
+      if (!neighbor || distance.has(neighbor)) continue;
+      if (!holons.some(holon => String(holon.id) === neighbor)) continue;
+
+      distance.set(neighbor, depth + 1);
+      queue.push(neighbor);
     }
   }
+
   return holons.filter(holon => distance.has(String(holon.id)));
 }
 
 function visibleModel() {
-  const holons = descendants(currentRootId, currentModel.holons, currentModel.relationships);
+  const holons = relatedWithinDepth(currentRootId, currentModel.holons, currentModel.relationships);
   const ids = new Set(holons.map(holon => String(holon.id)));
   return {
     holons,
@@ -156,8 +170,6 @@ function render() {
   const model = visibleModel();
   const elements = buildElements(model.holons, model.relationships, model.relationshipTypes);
 
-  // Replace the filtered model in one Cytoscape batch. This avoids leaving the
-  // renderer in an empty/intermediate state while changing the graph root.
   cy.batch(() => {
     cy.elements().remove();
     if (elements.length) cy.add(elements);
@@ -165,8 +177,6 @@ function render() {
 
   if (model.holons.length) {
     cy.layout({ name: 'cose', animate: false, fit: true, padding: 40 }).run();
-    // A root-filtered graph may contain only one node; explicitly fitting keeps
-    // that node visible instead of relying on the layout's fit behavior.
     cy.fit(cy.nodes(), 40);
   }
   updateNavigationButton();
