@@ -32,6 +32,9 @@
         .holarchy-filter #graphRoot { width: 220px; }
         .holarchy-filter #graphDepth { display: inline-block !important; width: 68px; min-width: 68px; height: 32px; padding: 4px 7px; border: 1px solid var(--eb-border-strong); border-radius: 5px; background: var(--eb-input-bg); color: var(--eb-text); }
         .holarchy-filter-field:has(#graphDepth) { flex: 0 0 auto; white-space: nowrap; }
+        .holarchy-filter-prov { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+        .holarchy-filter-prov label { font-size: 12px; font-weight: 600; opacity: .72; cursor: pointer; }
+        .holarchy-filter-prov input { margin: 0; accent-color: var(--eb-accent, #5b8def); }
         @media (max-width: 760px) {
             .workspace-primary { grid-template-columns: 1fr; }
             .holarchy-heading { align-items: stretch; }
@@ -64,6 +67,10 @@
                                         <option value="4">4</option>
                                         <option value="all">∞</option>
                                     </select>
+                                </div>
+                                <div class="holarchy-filter-prov">
+                                    <input id="graphProvenance" type="checkbox" aria-label="Show provenance">
+                                    <label for="graphProvenance">Prov</label>
                                 </div>
                             </div>
                         </div>
