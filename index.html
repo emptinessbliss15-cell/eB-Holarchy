@@ -11,6 +11,23 @@
     <link rel="stylesheet" href="./vendor/vanillagrid.css">
     <link rel="stylesheet" href="./vendor/hcg-autocomplete.css">
     <link rel="stylesheet" href="./app.css">
+    <style>
+        .workspace-primary { grid-template-columns: minmax(0, 1fr) minmax(280px, 360px); align-items: stretch; }
+        .workspace-primary .panel-graph { grid-column: auto; }
+        .holon-inspector { min-height: 460px; padding: 0 0 12px; overflow: hidden; }
+        .holon-inspector > .panel-heading { padding: 14px 14px 8px; margin: 0; border-bottom: 1px solid var(--eb-border); }
+        #holonInspectorContent { padding: 12px 14px; overflow: auto; max-height: 410px; }
+        .holon-inspector-title { font-size: 18px; font-weight: 700; margin-bottom: 10px; overflow-wrap: anywhere; }
+        .holon-inspector-actions { display: flex; gap: 8px; margin-bottom: 12px; }
+        .holon-inspector-actions button { padding: 7px 10px; border: 1px solid var(--eb-border-strong); border-radius: 5px; background: var(--eb-input-bg); color: var(--eb-text); }
+        .holon-property-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        .holon-property-table th, .holon-property-table td { padding: 7px 6px; border-bottom: 1px solid var(--eb-border); text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+        .holon-property-table th { width: 38%; font-size: 12px; opacity: .7; font-weight: 600; }
+        .holon-property-table td { white-space: pre-wrap; font-size: 13px; }
+        @media (max-width: 760px) {
+            .workspace-primary { grid-template-columns: 1fr; }
+        }
+    </style>
 </head>
 <body>
     <div id="shell" class="eb-shell">
