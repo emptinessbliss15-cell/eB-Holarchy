@@ -5,8 +5,10 @@ let cy = null;
 let currentModel = { holons: [], relationships: [], relationshipTypes: [] };
 let currentRootId = null;
 let currentDepth = 2;
+let showProvenance = false;
 let selectionHandler = null;
 let depthListenerInstalled = false;
+let provenanceListenerInstalled = false;
 let navigationInstalled = false;
 
 function installStyles() {
@@ -88,8 +90,19 @@ function relatedWithinDepth(rootId, holons, relationships) {
   return holons.filter(holon => distance.has(String(holon.id)));
 }
 
+function isProvenanceHolon(holon) {
+  const type = String(holon?.holon_type || holon?.holon_type_name || '').trim().toLowerCase();
+  return type === 'provenance';
+}
+
+function visibleHolonsByProvenance(holons) {
+  if (showProvenance) return holons;
+  return holons.filter(holon => !isProvenanceHolon(holon));
+}
+
 function visibleModel() {
-  const holons = relatedWithinDepth(currentRootId, currentModel.holons, currentModel.relationships);
+  const relatedHolons = relatedWithinDepth(currentRootId, currentModel.holons, currentModel.relationships);
+  const holons = visibleHolonsByProvenance(relatedHolons);
   const ids = new Set(holons.map(holon => String(holon.id)));
   return {
     holons,
@@ -191,10 +204,19 @@ function installDepthControl() {
   depthListenerInstalled = true;
 }
 
+function installProvenanceControl() {
+  if (provenanceListenerInstalled) return;
+  const control = document.getElementById('graphProvenance');
+  if (!control) return;
+  showProvenance = control.checked;
+  control.addEventListener('change', () => { showProvenance = control.checked; render(); });
+  provenanceListenerInstalled = true;
+}
+
 export function createHolonGraph({ element, holons, relationships, relationshipTypes = [], rootId = null, onSelect = null }) {
   if (!element) return null;
   if (!window.cytoscape) throw new Error('Cytoscape is not loaded');
-  installStyles(); installStatusLegend(); installDepthControl(); installNavigation(); cy?.destroy(); selectionHandler = onSelect;
+  installStyles(); installStatusLegend(); installDepthControl(); installProvenanceControl(); installNavigation(); cy?.destroy(); selectionHandler = onSelect;
   currentModel = { holons, relationships, relationshipTypes };
   currentRootId = rootId || null;
   const dark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
@@ -228,6 +250,7 @@ export function getGraphRoot() { return currentRootId; }
 export function getGraphParent() { return graphParentId(); }
 
 export function setGraphDepth(depth) { currentDepth = depth || 'all'; render(); }
+export function setGraphProvenance(enabled) { showProvenance = Boolean(enabled); const control = document.getElementById('graphProvenance'); if (control) control.checked = showProvenance; render(); }
 export function updateHolonGraph(model) { if (!cy) return; currentModel = model || { holons: [], relationships: [], relationshipTypes: [] }; if (currentRootId && !currentModel.holons.some(h => String(h.id) === String(currentRootId))) currentRootId = null; render(); }
 export function destroyHolonGraph() { cy?.destroy(); cy = null; currentRootId = null; selectionHandler = null; currentModel = { holons: [], relationships: [], relationshipTypes: [] }; }
 export function getHolonGraph() { return cy; }
