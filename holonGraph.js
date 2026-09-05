@@ -27,25 +27,19 @@ function installStyles() {
 }
 
 function relationshipLabel(relationship, relationshipTypes) {
-  return relationship.relationship_type || relationship.relationship_type_name
-    || relationshipTypes.find(type => type.id === relationship.relationship_type_id)?.name || 'relationship';
+  return relationship.relationship_type || relationship.relationship_type_name || relationshipTypes.find(type => type.id === relationship.relationship_type_id)?.name || 'relationship';
 }
 
 function descendants(rootId, holons, relationships) {
   if (!rootId) return holons;
-
-  // Relationships are stored child/source -> parent/target. Starting at the
-  // selected root, walk outward through children, but stop at the requested
-  // graph depth so a large Holarchy does not become one giant graph.
   const root = String(rootId);
+  if (!holons.some(holon => String(holon.id) === root)) return [];
   const distance = new Map([[root, 0]]);
   const queue = [root];
-
   while (queue.length) {
     const current = queue.shift();
     const depth = distance.get(current);
     if (currentDepth !== 'all' && depth >= Number(currentDepth)) continue;
-
     for (const relationship of relationships) {
       if (String(relationship.target_holon_id) !== current) continue;
       const child = String(relationship.source_holon_id);
@@ -54,40 +48,29 @@ function descendants(rootId, holons, relationships) {
       queue.push(child);
     }
   }
-
   return holons.filter(holon => distance.has(String(holon.id)));
 }
 
 function visibleModel() {
   const holons = descendants(currentRootId, currentModel.holons, currentModel.relationships);
   const ids = new Set(holons.map(holon => String(holon.id)));
-  return {
-    holons,
-    relationships: currentModel.relationships.filter(r => ids.has(String(r.source_holon_id)) && ids.has(String(r.target_holon_id))),
-    relationshipTypes: currentModel.relationshipTypes,
-  };
+  return { holons, relationships: currentModel.relationships.filter(r => ids.has(String(r.source_holon_id)) && ids.has(String(r.target_holon_id))), relationshipTypes: currentModel.relationshipTypes };
 }
 
 function buildElements(holons, relationships, relationshipTypes) {
   const nodes = holons.map(holon => ({ data: { id: String(holon.id), label: holon.name || '(unnamed)', type: holon.holon_type || 'Holon', holonId: holon.id } }));
-  const edges = relationships.map(relationship => ({ data: {
-    id: String(relationship.id), source: String(relationship.source_holon_id), target: String(relationship.target_holon_id),
-    label: relationshipLabel(relationship, relationshipTypes), relationship,
-  } }));
+  const edges = relationships.map(relationship => ({ data: { id: String(relationship.id), source: String(relationship.source_holon_id), target: String(relationship.target_holon_id), label: relationshipLabel(relationship, relationshipTypes), relationship } }));
   return [...nodes, ...edges];
 }
 
-function emitSelection(holon) {
-  if (selectionHandler) selectionHandler(holon || null);
-  window.dispatchEvent(new CustomEvent('holon:selected', { detail: holon || null }));
-}
+function emitSelection(holon) { if (selectionHandler) selectionHandler(holon || null); window.dispatchEvent(new CustomEvent('holon:selected', { detail: holon || null })); }
 
 function render() {
   if (!cy) return;
   const model = visibleModel();
   cy.elements().remove();
   cy.add(buildElements(model.holons, model.relationships, model.relationshipTypes));
-  cy.layout({ name: 'cose', animate: false, fit: true, padding: 40 }).run();
+  if (model.holons.length) cy.layout({ name: 'cose', animate: false, fit: true, padding: 40 }).run();
 }
 
 function installDepthControl() {
@@ -95,73 +78,38 @@ function installDepthControl() {
   const control = document.getElementById('graphDepth');
   if (!control) return;
   currentDepth = control.value || 2;
-  control.addEventListener('change', () => {
-    currentDepth = control.value || 2;
-    render();
-  });
+  control.addEventListener('change', () => { currentDepth = control.value || 2; render(); });
   depthListenerInstalled = true;
 }
 
 export function createHolonGraph({ element, holons, relationships, relationshipTypes = [], rootId = null, onSelect = null }) {
   if (!element) return null;
   if (!window.cytoscape) throw new Error('Cytoscape is not loaded');
-  installStyles();
-  installDepthControl();
-  cy?.destroy();
-  selectionHandler = onSelect;
+  installStyles(); installDepthControl(); cy?.destroy(); selectionHandler = onSelect;
   currentModel = { holons, relationships, relationshipTypes };
-  currentRootId = rootId;
+  currentRootId = rootId || null;
   const dark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
-  const surface = dark ? '#242424' : '#fff';
-  const text = dark ? '#eeeeee' : '#222';
-  const edge = dark ? '#aaaaaa' : '#777';
+  const surface = dark ? '#242424' : '#fff'; const text = dark ? '#eeeeee' : '#222'; const edge = dark ? '#aaaaaa' : '#777';
   const model = visibleModel();
-  cy = window.cytoscape({ container: element, elements: buildElements(model.holons, model.relationships, model.relationshipTypes), layout: { name: 'cose', animate: false, fit: true, padding: 40 }, minZoom: 0.2, maxZoom: 3, wheelSensitivity: 0.25,
-    style: [
-      { selector: 'node', style: { label: 'data(label)', 'text-valign': 'center', 'text-halign': 'center', 'background-color': '#5b8def', color: '#fff', 'font-size': 13, 'font-weight': 600, 'text-wrap': 'wrap', 'text-max-width': 110, width: 'label', height: 'label', padding: '14px', shape: 'roundrectangle', 'border-width': 2, 'border-color': '#3769c5' } },
-      { selector: 'node:selected', style: { 'background-color': '#f59e0b', 'border-color': '#b45309', 'border-width': 3 } },
-      { selector: 'edge', style: { 'curve-style': 'bezier', width: 2, 'line-color': edge, 'target-arrow-color': edge, 'target-arrow-shape': 'triangle', label: 'data(label)', color: text, 'font-size': 11, 'text-background-color': surface, 'text-background-opacity': 0.9, 'text-background-padding': 2 } },
-      { selector: 'edge:selected', style: { 'line-color': '#f59e0b', 'target-arrow-color': '#f59e0b', width: 3 } },
-    ],
-  });
-
-  // Single click selects/inspects. Double-click makes the Holon the new
-  // graph root, which provides the outward-travel interaction without
-  // sacrificing the inspector click behavior.
-  cy.on('tap', 'node', event => {
-    const id = String(event.target.data('holonId'));
-    const holon = currentModel.holons.find(item => String(item.id) === id) || null;
-    emitSelection(holon);
-  });
-  cy.on('dbltap', 'node', event => {
-    const id = String(event.target.data('holonId'));
-    if (!currentModel.holons.some(item => String(item.id) === id)) return;
-    currentRootId = id;
-    const control = document.getElementById('graphRoot');
-    if (control) control.value = currentModel.holons.find(item => String(item.id) === id)?.name || '';
-    render();
-    const node = cy.nodes(`[id = "${id.replaceAll('"', '\\"')}"]`);
-    node.select();
-    emitSelection(currentModel.holons.find(item => String(item.id) === id) || null);
-  });
-  cy.on('click', 'node', event => {
-    const id = String(event.target.data('holonId'));
-    const holon = currentModel.holons.find(item => String(item.id) === id) || null;
-    emitSelection(holon);
-  });
+  cy = window.cytoscape({ container: element, elements: buildElements(model.holons, model.relationships, model.relationshipTypes), layout: { name: 'cose', animate: false, fit: true, padding: 40 }, minZoom: 0.2, maxZoom: 3, wheelSensitivity: 0.25, style: [
+    { selector: 'node', style: { label: 'data(label)', 'text-valign': 'center', 'text-halign': 'center', 'background-color': '#5b8def', color: '#fff', 'font-size': 13, 'font-weight': 600, 'text-wrap': 'wrap', 'text-max-width': 110, width: 'label', height: 'label', padding: '14px', shape: 'roundrectangle', 'border-width': 2, 'border-color': '#3769c5' } },
+    { selector: 'node:selected', style: { 'background-color': '#f59e0b', 'border-color': '#b45309', 'border-width': 3 } },
+    { selector: 'edge', style: { 'curve-style': 'bezier', width: 2, 'line-color': edge, 'target-arrow-color': edge, 'target-arrow-shape': 'triangle', label: 'data(label)', color: text, 'font-size': 11, 'text-background-color': surface, 'text-background-opacity': 0.9, 'text-background-padding': 2 } },
+    { selector: 'edge:selected', style: { 'line-color': '#f59e0b', 'target-arrow-color': '#f59e0b', width: 3 } },
+  ] });
+  cy.on('tap', 'node', event => { const id = String(event.target.data('holonId')); emitSelection(currentModel.holons.find(item => String(item.id) === id) || null); });
+  cy.on('dbltap', 'node', event => { const id = String(event.target.data('holonId')); if (!currentModel.holons.some(item => String(item.id) === id)) return; currentRootId = id; const control = document.getElementById('graphRoot'); if (control) control.value = currentModel.holons.find(item => String(item.id) === id)?.name || ''; render(); const node = cy.nodes(`[id = "${id.replaceAll('"', '\\"')}"]`); node.select(); emitSelection(currentModel.holons.find(item => String(item.id) === id) || null); });
+  cy.on('click', 'node', event => { const id = String(event.target.data('holonId')); emitSelection(currentModel.holons.find(item => String(item.id) === id) || null); });
   cy.on('tap', event => { if (event.target === cy) emitSelection(null); });
   return cy;
 }
 
-export function setGraphRoot(rootId) { currentRootId = rootId || null; render(); }
-export function setGraphDepth(depth) { currentDepth = depth || 'all'; render(); }
-
-export function updateHolonGraph(model) {
-  if (!cy) return;
-  currentModel = model || { holons: [], relationships: [], relationshipTypes: [] };
-  if (currentRootId && !currentModel.holons.some(h => String(h.id) === String(currentRootId))) currentRootId = null;
+export function setGraphRoot(rootId) {
+  const normalized = rootId == null ? null : String(rootId).trim();
+  currentRootId = normalized && currentModel.holons.some(holon => String(holon.id) === normalized) ? normalized : null;
   render();
 }
-
+export function setGraphDepth(depth) { currentDepth = depth || 'all'; render(); }
+export function updateHolonGraph(model) { if (!cy) return; currentModel = model || { holons: [], relationships: [], relationshipTypes: [] }; if (currentRootId && !currentModel.holons.some(h => String(h.id) === String(currentRootId))) currentRootId = null; render(); }
 export function destroyHolonGraph() { cy?.destroy(); cy = null; currentRootId = null; selectionHandler = null; currentModel = { holons: [], relationships: [], relationshipTypes: [] }; }
 export function getHolonGraph() { return cy; }
