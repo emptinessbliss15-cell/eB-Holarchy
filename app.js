@@ -68,8 +68,8 @@ function renderHolonInspector(holon) {
     keyCell.textContent = key;
     const valueCell = document.createElement('td');
     valueCell.textContent = formatPropertyValue(value);
-    tbody.append(keyCell, valueCell);
-    table.appendChild(row);
+    row.append(keyCell, valueCell);
+    tbody.appendChild(row);
   }
 
   if (!tbody.children.length) {
@@ -86,12 +86,17 @@ function renderHolonInspector(holon) {
   elements.inspectorContent.appendChild(table);
 }
 
-function openHolon(holon) {
+function selectHolonInInspector(holon) {
   if (!holon) return;
+  renderHolonInspector(holon);
   const node = graph?.nodes?.(`[id = "${String(holon.id).replaceAll('"', '\\"')}"]`);
   node?.select();
   if (node?.nonempty?.()) graph.center(node);
-  renderHolonInspector(holon);
+}
+
+function openHolon(holon) {
+  if (!holon) return;
+  selectHolonInInspector(holon);
   window.dispatchEvent(new CustomEvent('holon:selected', { detail: holon }));
 }
 
@@ -211,7 +216,7 @@ async function loadModel() {
   try {
     const model = await loadHolons(eBliss);
     holons = model.holons; relationships = model.relationships; relationshipTypes = model.relationshipTypes; holonTypes = model.holonTypes || [];
-    if (!graph) graph = createHolonGraph({ element: elements.graph, holons, relationships, relationshipTypes, rootId: null });
+    if (!graph) graph = createHolonGraph({ element: elements.graph, holons, relationships, relationshipTypes, rootId: null, onSelect: selectHolonInInspector });
     else updateHolonGraph({ holons, relationships, relationshipTypes });
     refreshGraphRootCombo();
     setStatus(`${holons.length} Holons · ${relationships.length} relationships`, 'success');
