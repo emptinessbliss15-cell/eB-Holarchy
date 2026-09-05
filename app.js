@@ -7,6 +7,7 @@ import { loadHolons } from './holons.js';
 import { eBStatus } from './eBStatus.js';
 import { createHolonGraph, updateHolonGraph, destroyHolonGraph, setGraphRoot, setGraphDepth } from './holonGraph.js';
 import { createEBComboBox, holonComboOptions } from './eBComboBox.js';
+import { createEBGrid } from './eBGrid.js';
 import { showModal } from './eBModal.js';
 
 const status = eBStatus;
@@ -18,7 +19,7 @@ const elements = {
   testStatusSuccess: document.getElementById('testStatusSuccess'), testStatusWarn: document.getElementById('testStatusWarn'), testStatusError: document.getElementById('testStatusError'),
 };
 let holons = [], relationships = [], relationshipTypes = [], holonTypes = [];
-let graph = null, graphRootCombo = null;
+let graph = null, graphRootCombo = null, propertyGrid = null, selectedHolon = null;
 
 function setStatus(text, level = 'info') { if (!text) return status.clear(); status[level](text); }
 function formatPropertyValue(value) { if (value === null || value === undefined || value === '') return '—'; if (typeof value === 'object') { try { return JSON.stringify(value, null, 2); } catch { return String(value); } } return String(value); }
@@ -27,9 +28,98 @@ function translateId(key, value) { if (value === null || value === undefined || 
 function propertyValueForDisplay(key, value) { return /_id$/i.test(key) ? translateId(key, value) : formatPropertyValue(value); }
 function isEditableHolonProperty(key) { return key === 'name' || key === 'holon_type'; }
 
-async function saveInspectorProperty(holon, key, value) { const nextValue = String(value ?? '').trim(); if (key === 'name' && !nextValue) { setStatus('Name cannot be empty', 'warn'); return; } if (nextValue === String(holon[key] ?? '')) return; setStatus(`Updating ${labelForKey(key)}…`); try { await eBliss.holons.update(holon.id, { [key]: nextValue }); await loadModel(); const updated = holons.find(item => String(item.id) === String(holon.id)) || { ...holon, [key]: nextValue }; renderHolonInspector(updated); const node = graph?.nodes?.(`[id = \"${String(updated.id).replaceAll('\"', '\\\"')}\"]`); node?.select(); if (node?.nonempty?.()) graph.center(node); setStatus(`${labelForKey(key)} updated`, 'success'); } catch (error) { setStatus(error.message || `Unable to update ${labelForKey(key)}`, 'error'); renderHolonInspector(holon); } }
+async function saveInspectorProperty(holon, key, value) {
+  if (!isEditableHolonProperty(key)) {
+    setStatus(`${labelForKey(key)} is read-only for now`, 'warn');
+    renderHolonInspector(holon);
+    return;
+  }
+  const nextValue = String(value ?? '').trim();
+  if (key === 'name' && !nextValue) { setStatus('Name cannot be empty', 'warn'); renderHolonInspector(holon); return; }
+  if (nextValue === String(holon[key] ?? '')) return;
+  setStatus(`Updating ${labelForKey(key)}…`);
+  try {
+    await eBliss.holons.update(holon.id, { [key]: nextValue });
+    await loadModel();
+    const updated = holons.find(item => String(item.id) === String(holon.id)) || { ...holon, [key]: nextValue };
+    selectedHolon = updated;
+    renderHolonInspector(updated);
+    const node = graph?.nodes?.(`[id = \"${String(updated.id).replaceAll('\"', '\\\"')}\"]`);
+    node?.select();
+    if (node?.nonempty?.()) graph.center(node);
+    setStatus(`${labelForKey(key)} updated`, 'success');
+  } catch (error) {
+    setStatus(error.message || `Unable to update ${labelForKey(key)}`, 'error');
+    renderHolonInspector(holon);
+  }
+}
 
-function renderHolonInspector(holon) { if (!elements.inspectorContent) return; elements.inspectorContent.replaceChildren(); if (!holon) { const empty = document.createElement('div'); empty.className = 'muted'; empty.textContent = 'Select a Holon to inspect its properties.'; elements.inspectorContent.appendChild(empty); return; } const title = document.createElement('div'); title.className = 'holon-inspector-title'; title.textContent = holon.name || '(unnamed Holon)'; elements.inspectorContent.appendChild(title); const actions = document.createElement('div'); actions.className = 'holon-inspector-actions'; const editButton = document.createElement('button'); editButton.type = 'button'; editButton.textContent = 'Edit Holon'; editButton.addEventListener('click', () => editHolon(holon)); actions.appendChild(editButton); elements.inspectorContent.appendChild(actions); const table = document.createElement('table'); table.className = 'holon-property-table'; const tbody = document.createElement('tbody'); for (const [key, value] of Object.entries(holon)) { if (key === 'children') continue; const row = document.createElement('tr'); const keyCell = document.createElement('th'); keyCell.scope = 'row'; keyCell.textContent = labelForKey(key); const valueCell = document.createElement('td'); if (isEditableHolonProperty(key)) { const input = document.createElement('input'); input.type = 'text'; input.value = value ?? ''; input.title = `Edit ${labelForKey(key)}`; input.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); input.blur(); } if (event.key === 'Escape') { event.preventDefault(); input.value = value ?? ''; input.blur(); } }); input.addEventListener('blur', () => saveInspectorProperty(holon, key, input.value)); valueCell.appendChild(input); } else { const display = document.createElement('span'); display.textContent = propertyValueForDisplay(key, value); valueCell.appendChild(display); } row.append(keyCell, valueCell); tbody.appendChild(row); } if (!tbody.children.length) { const row = document.createElement('tr'); const cell = document.createElement('td'); cell.colSpan = 2; cell.className = 'muted'; cell.textContent = 'No properties available.'; row.appendChild(cell); tbody.appendChild(row); } table.appendChild(tbody); elements.inspectorContent.appendChild(table); }
+function renderHolonInspector(holon) {
+  if (!elements.inspectorContent) return;
+  propertyGrid?.destroy?.();
+  propertyGrid = null;
+  elements.inspectorContent.replaceChildren();
+  if (!holon) {
+    const empty = document.createElement('div');
+    empty.className = 'muted';
+    empty.textContent = 'Select a Holon to inspect its properties.';
+    elements.inspectorContent.appendChild(empty);
+    return;
+  }
+
+  selectedHolon = holon;
+  const title = document.createElement('div');
+  title.className = 'holon-inspector-title';
+  title.textContent = holon.name || '(unnamed Holon)';
+  elements.inspectorContent.appendChild(title);
+
+  const actions = document.createElement('div');
+  actions.className = 'holon-inspector-actions';
+  const editButton = document.createElement('button');
+  editButton.type = 'button';
+  editButton.textContent = 'Edit Holon';
+  editButton.addEventListener('click', () => editHolon(holon));
+  actions.appendChild(editButton);
+  elements.inspectorContent.appendChild(actions);
+
+  const gridElement = document.createElement('div');
+  gridElement.className = 'holon-property-grid';
+  gridElement.setAttribute('aria-label', `${holon.name || 'Holon'} properties`);
+  elements.inspectorContent.appendChild(gridElement);
+
+  const rows = Object.entries(holon)
+    .filter(([key]) => key !== 'children')
+    .map(([key, value]) => ({
+      key,
+      property: labelForKey(key),
+      value: propertyValueForDisplay(key, value),
+    }));
+
+  propertyGrid = createEBGrid(gridElement, {
+    data: rows,
+    columns: [
+      { key: 'property', label: 'Property', sortable: true },
+      { key: 'value', label: 'Value', sortable: true },
+    ],
+    pageSize: Math.max(rows.length, 10),
+    pagination: false,
+    filterable: false,
+    sortable: true,
+    resizableColumns: true,
+    editableRows: true,
+    keyboardNavigation: true,
+    contextMenu: false,
+    onRowEdit: (row, field, newValue) => {
+      if (field !== 'value') return;
+      const key = row.key;
+      const rawValue = String(newValue ?? '');
+      const originalValue = propertyValueForDisplay(key, holon[key]);
+      if (rawValue === originalValue) return;
+      void saveInspectorProperty(holon, key, rawValue);
+    },
+  });
+}
+
 function selectHolonInInspector(holon) { if (!holon) return; renderHolonInspector(holon); const node = graph?.nodes?.(`[id = \"${String(holon.id).replaceAll('\"', '\\\"')}\"]`); node?.select(); if (node?.nonempty?.()) graph.center(node); }
 function openHolon(holon) { if (!holon) return; selectHolonInInspector(holon); window.dispatchEvent(new CustomEvent('holon:selected', { detail: holon })); }
 
@@ -48,9 +138,9 @@ async function createHolon(prefillName = '', prefillType = '') { const type = pr
 async function editHolon(holon) { const currentType = holon.holon_type || defaultHolonType(); const values = await showModal({ title: 'Edit Holon', submitLabel: 'Save Changes', fields: [{ name: 'name', label: 'Name', required: true, value: holon.name || '' }, { name: 'holon_type', label: 'Type', type: 'combobox', options: holonTypeOptions(currentType), value: currentType, required: true, minChars: 0, allowCustom: false }] }); if (!values) return; const name = values.name.trim(), holonType = values.holon_type.trim(); if (!name || !holonType) return setStatus('Name and type are required', 'warn'); setStatus('Updating Holon…'); try { await eBliss.holons.update(holon.id, { name, holon_type: holonType }); await loadModel(); openHolon(holons.find(h => h.id === holon.id) || { ...holon, name, holon_type: holonType }); setStatus('Holon updated', 'success'); } catch (error) { setStatus(error.message || 'Unable to update Holon', 'error'); } }
 async function createRelationship() { if (holons.length < 2 || !relationshipTypes.length) return setStatus('Need at least two Holons and one relationship type', 'warn'); const values = await showModal({ title: 'New Relationship', submitLabel: 'Create Relationship', fields: [{ name: 'source_holon_id', label: 'Source Holon', type: 'select', options: holonOptions(), required: true }, { name: 'relationship_type_id', label: 'Relationship', type: 'select', options: relationshipTypeOptions(), required: true }, { name: 'target_holon_id', label: 'Target Holon', type: 'select', options: holonOptions(), required: true }, { name: 'position', label: 'Position', type: 'number', value: '0' }] }); if (!values) return; setStatus('Creating relationship…'); try { await eBliss.relationships.create({ source_holon_id: values.source_holon_id, relationship_type_id: values.relationship_type_id, target_holon_id: values.target_holon_id, position: Number(values.position) || 0 }); await loadModel(); setStatus('Relationship created', 'success'); } catch (error) { setStatus(error.message || 'Unable to create relationship', 'error'); } }
 
-async function loadModel() { setStatus('Loading Holon model…'); try { const model = await loadHolons(eBliss); holons = model.holons; relationships = model.relationships; relationshipTypes = model.relationshipTypes; holonTypes = model.holonTypes || []; if (!graph) graph = createHolonGraph({ element: elements.graph, holons, relationships, relationshipTypes, rootId: null, onSelect: selectHolonInInspector }); else updateHolonGraph({ holons, relationships, relationshipTypes }); installGraphDepthControl(); refreshGraphRootCombo(); setStatus(`${holons.length} Holons · ${relationships.length} relationships`, 'success'); } catch (error) { setStatus(error.message || 'Unable to load Holon model', 'error'); } }
+async function loadModel() { setStatus('Loading Holon model…'); try { const model = await loadHolons(eBliss); holons = model.holons; relationships = model.relationships; relationshipTypes = model.relationshipTypes; holonTypes = model.holonTypes || []; if (!graph) graph = createHolonGraph({ element: elements.graph, holons, relationships, relationshipTypes, rootId: null, onSelect: selectHolonInInspector }); else updateHolonGraph({ holons, relationships, relationshipTypes }); installGraphDepthControl(); refreshGraphRootCombo(); if (selectedHolon) { const refreshed = holons.find(item => String(item.id) === String(selectedHolon.id)); if (refreshed) renderHolonInspector(refreshed); } setStatus(`${holons.length} Holons · ${relationships.length} relationships`, 'success'); } catch (error) { setStatus(error.message || 'Unable to load Holon model', 'error'); } }
 
-async function applySession(session) { const user = session?.user || null; elements.app.hidden = !user; if (elements.refresh) elements.refresh.disabled = !user; if (user) return loadModel(); holons = []; relationships = []; relationshipTypes = []; holonTypes = []; destroyHolonGraph(); graph = null; graphRootCombo?.destroy?.(); graphRootCombo = null; if (elements.inspectorContent) elements.inspectorContent.replaceChildren(); }
+async function applySession(session) { const user = session?.user || null; elements.app.hidden = !user; if (elements.refresh) elements.refresh.disabled = !user; if (user) return loadModel(); holons = []; relationships = []; relationshipTypes = []; holonTypes = []; selectedHolon = null; propertyGrid?.destroy?.(); propertyGrid = null; destroyHolonGraph(); graph = null; graphRootCombo?.destroy?.(); graphRootCombo = null; if (elements.inspectorContent) elements.inspectorContent.replaceChildren(); }
 
 initAuth({ api: eBliss, container: elements.auth, onSession: applySession, setStatus });
 elements.refresh?.addEventListener('click', loadModel); elements.refreshApp?.addEventListener('click', () => window.location.reload()); elements.debugApp?.addEventListener('click', () => { debugger; }); elements.newHolon?.addEventListener('click', () => createHolon()); elements.newRelationship?.addEventListener('click', createRelationship); elements.newHolonType?.addEventListener('click', createHolonType); elements.testStatusSuccess?.addEventListener('click', () => setStatus('Success test', 'success')); elements.testStatusWarn?.addEventListener('click', () => setStatus('Warning test', 'warn')); elements.testStatusError?.addEventListener('click', () => setStatus('Error test', 'error'));
