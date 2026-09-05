@@ -23,9 +23,29 @@ function installStyles() {
     .panel-actions button { padding: 6px 9px; border: 1px solid var(--eb-border-strong); border-radius: 5px; background: var(--eb-input-bg); color: var(--eb-text); }
     #graphUp { white-space: nowrap; }
     #holonGraph { width: 100%; height: calc(100vh - 190px); min-height: 480px; border: 1px solid var(--eb-border); border-radius: 6px; background: var(--eb-bg); }
+    .holon-status-legend { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 2px 0 8px; font-size: 11px; opacity: .9; }
+    .holon-status-key { display: inline-flex; align-items: center; gap: 4px; }
+    .holon-status-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; border: 1px solid rgba(0,0,0,.18); }
     @media (max-width: 760px) { .graph-context { min-width: 0; flex: 1; } .graph-context .hcg-autocomplete { min-width: 0; } #holonGraph { height: 55vh; min-height: 360px; } }
   `;
   document.head.appendChild(style);
+}
+
+function installStatusLegend() {
+  if (document.getElementById('holonStatusLegend')) return;
+  const graph = document.getElementById('holonGraph');
+  if (!graph?.parentElement) return;
+  const legend = document.createElement('div');
+  legend.id = 'holonStatusLegend';
+  legend.className = 'holon-status-legend';
+  legend.setAttribute('aria-label', 'Holon status colors');
+  legend.innerHTML = `
+    <span class="holon-status-key"><span class="holon-status-dot" style="background:#5b8def"></span>Current</span>
+    <span class="holon-status-key"><span class="holon-status-dot" style="background:#facc15"></span>Proposed</span>
+    <span class="holon-status-key"><span class="holon-status-dot" style="background:#22c55e"></span>Approved</span>
+    <span class="holon-status-key"><span class="holon-status-dot" style="background:#ef4444"></span>Denied</span>
+  `;
+  graph.parentElement.insertBefore(legend, graph);
 }
 
 function relationshipLabel(relationship, relationshipTypes) {
@@ -59,8 +79,16 @@ function visibleModel() {
   return { holons, relationships: currentModel.relationships.filter(r => ids.has(String(r.source_holon_id)) && ids.has(String(r.target_holon_id))), relationshipTypes: currentModel.relationshipTypes };
 }
 
+function normalizeStatus(status) {
+  const value = String(status ?? '').trim().toLowerCase();
+  if (value === 'proposed' || value === 'pending' || value === 'pending_review' || value === 'needs_review') return 'proposed';
+  if (value === 'approved' || value === 'accepted') return 'approved';
+  if (value === 'denied' || value === 'rejected') return 'denied';
+  return 'current';
+}
+
 function buildElements(holons, relationships, relationshipTypes) {
-  const nodes = holons.map(holon => ({ data: { id: String(holon.id), label: holon.name || '(unnamed)', type: holon.holon_type || 'Holon', holonId: holon.id } }));
+  const nodes = holons.map(holon => ({ data: { id: String(holon.id), label: holon.name || '(unnamed)', type: holon.holon_type || 'Holon', holonId: holon.id, status: normalizeStatus(holon.status) } }));
   const edges = relationships.map(relationship => ({ data: { id: String(relationship.id), source: String(relationship.source_holon_id), target: String(relationship.target_holon_id), label: relationshipLabel(relationship, relationshipTypes), relationship } }));
   return [...nodes, ...edges];
 }
@@ -139,7 +167,7 @@ function installDepthControl() {
 export function createHolonGraph({ element, holons, relationships, relationshipTypes = [], rootId = null, onSelect = null }) {
   if (!element) return null;
   if (!window.cytoscape) throw new Error('Cytoscape is not loaded');
-  installStyles(); installDepthControl(); installNavigation(); cy?.destroy(); selectionHandler = onSelect;
+  installStyles(); installStatusLegend(); installDepthControl(); installNavigation(); cy?.destroy(); selectionHandler = onSelect;
   currentModel = { holons, relationships, relationshipTypes };
   currentRootId = rootId || null;
   const dark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
@@ -147,7 +175,10 @@ export function createHolonGraph({ element, holons, relationships, relationshipT
   const model = visibleModel();
   cy = window.cytoscape({ container: element, elements: buildElements(model.holons, model.relationships, model.relationshipTypes), layout: { name: 'cose', animate: false, fit: true, padding: 40 }, minZoom: 0.2, maxZoom: 3, wheelSensitivity: 0.25, style: [
     { selector: 'node', style: { label: 'data(label)', 'text-valign': 'center', 'text-halign': 'center', 'background-color': '#5b8def', color: '#fff', 'font-size': 13, 'font-weight': 600, 'text-wrap': 'wrap', 'text-max-width': 110, width: 'label', height: 'label', padding: '14px', shape: 'roundrectangle', 'border-width': 2, 'border-color': '#3769c5' } },
-    { selector: 'node:selected', style: { 'background-color': '#f59e0b', 'border-color': '#b45309', 'border-width': 3 } },
+    { selector: 'node[status = "proposed"]', style: { 'background-color': '#facc15', 'border-color': '#a16207', color: '#222' } },
+    { selector: 'node[status = "approved"]', style: { 'background-color': '#22c55e', 'border-color': '#15803d' } },
+    { selector: 'node[status = "denied"]', style: { 'background-color': '#ef4444', 'border-color': '#b91c1c' } },
+    { selector: 'node:selected', style: { 'border-color': '#f59e0b', 'border-width': 4 } },
     { selector: 'edge', style: { 'curve-style': 'bezier', width: 2, 'line-color': edge, 'target-arrow-color': edge, 'target-arrow-shape': 'triangle', label: 'data(label)', color: text, 'font-size': 11, 'text-background-color': surface, 'text-background-opacity': 0.9, 'text-background-padding': 2 } },
     { selector: 'edge:selected', style: { 'line-color': '#f59e0b', 'target-arrow-color': '#f59e0b', width: 3 } },
   ] });
