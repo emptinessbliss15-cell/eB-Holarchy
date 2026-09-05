@@ -26,15 +26,15 @@ function formatPropertyValue(value) { if (value === null || value === undefined 
 function labelForKey(key) { return key.replace(/_id$/i, ' ID').replace(/_/g, ' ').replace(/\b\w/g, character => character.toUpperCase()); }
 function translateId(key, value) { if (value === null || value === undefined || value === '') return '—'; const id = String(value); if (key === 'holon_type_id') { const type = holonTypes.find(item => String(item.id) === id); return type ? type.name : id; } if (key === 'parent_holon_id' || key === 'source_holon_id' || key === 'target_holon_id') { const holon = holons.find(item => String(item.id) === id); return holon ? (holon.name || '(unnamed Holon)') : id; } if (key === 'relationship_type_id') { const type = relationshipTypes.find(item => String(item.id) === id); return type ? (type.name || '(unnamed relationship)') : id; } return id; }
 function propertyValueForDisplay(key, value) { return /_id$/i.test(key) ? translateId(key, value) : formatPropertyValue(value); }
-function isEditableHolonProperty(key) { return key === 'name' || key === 'holon_type'; }
+function isEditableHolonProperty(key) { return key !== 'id' && key !== 'created_at'; }
 
 async function saveInspectorProperty(holon, key, value) {
   if (!isEditableHolonProperty(key)) {
-    setStatus(`${labelForKey(key)} is read-only for now`, 'warn');
+    setStatus(`${labelForKey(key)} is read-only`, 'warn');
     renderHolonInspector(holon);
     return;
   }
-  const nextValue = String(value ?? '').trim();
+  const nextValue = key === 'Content' ? String(value ?? '') : String(value ?? '').trim();
   if (key === 'name' && !nextValue) { setStatus('Name cannot be empty', 'warn'); renderHolonInspector(holon); return; }
   if (nextValue === String(holon[key] ?? '')) return;
   setStatus(`Updating ${labelForKey(key)}…`);
@@ -89,11 +89,7 @@ function renderHolonInspector(holon) {
 
   const rows = Object.entries(holon)
     .filter(([key]) => key !== 'children')
-    .map(([key, value]) => ({
-      key,
-      property: labelForKey(key),
-      value: propertyValueForDisplay(key, value),
-    }));
+    .map(([key, value]) => ({ key, property: labelForKey(key), value: propertyValueForDisplay(key, value) }));
 
   propertyGrid = createEBGrid(gridElement, {
     data: rows,
@@ -105,7 +101,7 @@ function renderHolonInspector(holon) {
         sortable: true,
         editor: row => row.key === 'holon_type'
           ? { type: 'combobox', options: holonTypeOptions(holon.holon_type), value: holon.holon_type, minChars: 0, allowCustom: false }
-          : null,
+          : row.key === 'id' || row.key === 'created_at' ? null : { type: 'text' },
       },
     ],
     pageSize: Math.max(rows.length, 10),
@@ -149,5 +145,4 @@ async function loadModel() { setStatus('Loading Holon model…'); try { const mo
 
 async function applySession(session) { const user = session?.user || null; elements.app.hidden = !user; if (elements.refresh) elements.refresh.disabled = !user; if (user) return loadModel(); holons = []; relationships = []; relationshipTypes = []; holonTypes = []; selectedHolon = null; propertyGrid?.destroy?.(); propertyGrid = null; destroyHolonGraph(); graph = null; graphRootCombo?.destroy?.(); graphRootCombo = null; if (elements.inspectorContent) elements.inspectorContent.replaceChildren(); }
 
-initAuth({ api: eBliss, container: elements.auth, onSession: applySession, setStatus });
-elements.refresh?.addEventListener('click', loadModel); elements.refreshApp?.addEventListener('click', () => window.location.reload()); elements.debugApp?.addEventListener('click', () => { debugger; }); elements.newHolon?.addEventListener('click', () => createHolon()); elements.newRelationship?.addEventListener('click', createRelationship); elements.newHolonType?.addEventListener('click', createHolonType); elements.testStatusSuccess?.addEventListener('click', () => setStatus('Success test', 'success')); elements.testStatusWarn?.addEventListener('click', () => setStatus('Warning test', 'warn')); elements.testStatusError?.addEventListener('click', () => setStatus('Error test', 'error'));
+initAuth({ api: eBliss, container: elements.auth, onSession: applySession, setStatus }); elements.refresh?.addEventListener('click', loadModel); elements.refreshApp?.addEventListener('click', () => window.location.reload()); elements.debugApp?.addEventListener('click', () => { debugger; }); elements.newHolon?.addEventListener('click', () => createHolon()); elements.newRelationship?.addEventListener('click', createRelationship); elements.newHolonType?.addEventListener('click', createHolonType); elements.testStatusSuccess?.addEventListener('click', () => setStatus('Success test', 'success')); elements.testStatusWarn?.addEventListener('click', () => setStatus('Warning test', 'warn')); elements.testStatusError?.addEventListener('click', () => setStatus('Error test', 'error'));
