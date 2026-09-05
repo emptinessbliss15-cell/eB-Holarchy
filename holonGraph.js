@@ -4,6 +4,7 @@
 let cy = null;
 let currentModel = { holons: [], relationships: [], relationshipTypes: [] };
 let currentRootId = null;
+let selectionHandler = null;
 
 function installStyles() {
   if (document.getElementById('holon-graph-style')) return;
@@ -55,7 +56,7 @@ function visibleModel() {
 }
 
 function buildElements(holons, relationships, relationshipTypes) {
-  const nodes = holons.map(holon => ({ data: { id: String(holon.id), label: holon.name || '(unnamed)', type: holon.holon_type || 'Holon', holon } }));
+  const nodes = holons.map(holon => ({ data: { id: String(holon.id), label: holon.name || '(unnamed)', type: holon.holon_type || 'Holon', holonId: holon.id } }));
   const edges = relationships.map(relationship => ({ data: {
     id: String(relationship.id), source: String(relationship.source_holon_id), target: String(relationship.target_holon_id),
     label: relationshipLabel(relationship, relationshipTypes), relationship,
@@ -63,7 +64,10 @@ function buildElements(holons, relationships, relationshipTypes) {
   return [...nodes, ...edges];
 }
 
-function emitSelection(holon) { window.dispatchEvent(new CustomEvent('holon:selected', { detail: holon || null })); }
+function emitSelection(holon) {
+  if (selectionHandler) selectionHandler(holon || null);
+  window.dispatchEvent(new CustomEvent('holon:selected', { detail: holon || null }));
+}
 
 function render() {
   if (!cy) return;
@@ -73,11 +77,12 @@ function render() {
   cy.layout({ name: 'cose', animate: false, fit: true, padding: 40 }).run();
 }
 
-export function createHolonGraph({ element, holons, relationships, relationshipTypes = [], rootId = null }) {
+export function createHolonGraph({ element, holons, relationships, relationshipTypes = [], rootId = null, onSelect = null }) {
   if (!element) return null;
   if (!window.cytoscape) throw new Error('Cytoscape is not loaded');
   installStyles();
   cy?.destroy();
+  selectionHandler = onSelect;
   currentModel = { holons, relationships, relationshipTypes };
   currentRootId = rootId;
   const dark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
@@ -92,7 +97,19 @@ export function createHolonGraph({ element, holons, relationships, relationshipT
       { selector: 'edge:selected', style: { 'line-color': '#f59e0b', 'target-arrow-color': '#f59e0b', width: 3 } },
     ],
   });
-  cy.on('tap', 'node', event => emitSelection(event.target.data('holon')));
+
+  // Use Cytoscape's direct node event. The Holon ID is resolved back through
+  // the app model rather than relying on an object stored in Cytoscape data.
+  cy.on('tap', 'node', event => {
+    const id = String(event.target.data('holonId'));
+    const holon = currentModel.holons.find(item => String(item.id) === id) || null;
+    emitSelection(holon);
+  });
+  cy.on('click', 'node', event => {
+    const id = String(event.target.data('holonId'));
+    const holon = currentModel.holons.find(item => String(item.id) === id) || null;
+    emitSelection(holon);
+  });
   cy.on('tap', event => { if (event.target === cy) emitSelection(null); });
   return cy;
 }
@@ -106,5 +123,5 @@ export function updateHolonGraph(model) {
   render();
 }
 
-export function destroyHolonGraph() { cy?.destroy(); cy = null; currentRootId = null; currentModel = { holons: [], relationships: [], relationshipTypes: [] }; }
+export function destroyHolonGraph() { cy?.destroy(); cy = null; currentRootId = null; selectionHandler = null; currentModel = { holons: [], relationships: [], relationshipTypes: [] }; }
 export function getHolonGraph() { return cy; }
