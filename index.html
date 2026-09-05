@@ -28,7 +28,8 @@
         .holarchy-filter-field { display: flex; align-items: center; gap: 5px; }
         .holarchy-filter-field > span { font-size: 12px; font-weight: 600; opacity: .72; }
         .holarchy-filter #graphRoot { width: 220px; }
-        .holarchy-filter #graphDepth { min-width: 64px; }
+        .holarchy-filter #graphDepth { display: inline-block; width: 68px; min-width: 68px; height: 32px; padding: 4px 7px; border: 1px solid var(--eb-border-strong); border-radius: 5px; background: var(--eb-input-bg); color: var(--eb-text); }
+        .holarchy-filter-field:has(#graphDepth) { flex: 0 0 auto; white-space: nowrap; }
         @media (max-width: 760px) {
             .workspace-primary { grid-template-columns: 1fr; }
             .holarchy-filter { margin-left: 0; width: 100%; }
@@ -40,7 +41,6 @@
     <div id="shell" class="eb-shell">
         <div id="header"></div>
         <div id="status"></div>
-
         <main class="eb-main">
             <section id="app" class="card" hidden>
                 <div class="workspace-grid workspace-primary">
@@ -56,11 +56,7 @@
                                     <div class="holarchy-filter-field">
                                         <span>Depth</span>
                                         <select id="graphDepth" aria-label="Holarchy graph depth">
-                                            <option value="1">1</option>
-                                            <option value="2" selected>2</option>
-                                            <option value="3">3</option>
-                                            <option value="4">4</option>
-                                            <option value="all">∞</option>
+                                            <option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option><option value="all">∞</option>
                                         </select>
                                     </div>
                                 </div>
@@ -68,69 +64,29 @@
                         </div>
                         <div id="holonGraph" aria-label="Holon relationship graph"></div>
                     </section>
-
                     <aside id="holonInspector" class="panel holon-inspector" aria-label="Holon properties">
-                        <div class="panel-heading">
-                            <h3>Holon Properties</h3>
-                        </div>
+                        <div class="panel-heading"><h3>Holon Properties</h3></div>
                         <div id="holonInspectorContent" class="muted">Select a Holon to inspect its properties.</div>
                     </aside>
                 </div>
-
                 <div class="workspace-grid workspace-grids">
-                    <section class="panel">
-                        <div class="panel-heading">
-                            <h3>Holons</h3>
-                            <div class="panel-actions">
-                                <button id="newHolon" type="button">+ Holon</button>
-                                <button id="newHolonType" type="button">+ Type</button>
-                            </div>
-                        </div>
-                        <div id="grid" aria-label="Holons"></div>
-                    </section>
-
-                    <section class="panel">
-                        <h3 id="activeList">Relationships</h3>
-                        <div class="muted" id="listMode"></div>
-                        <div id="detailGrid" aria-label="Relationships"></div>
-                    </section>
+                    <section class="panel"><div class="panel-heading"><h3>Holons</h3><div class="panel-actions"><button id="newHolon" type="button">+ Holon</button><button id="newHolonType" type="button">+ Type</button></div></div><div id="grid" aria-label="Holons"></div></section>
+                    <section class="panel"><h3 id="activeList">Relationships</h3><div class="muted" id="listMode"></div><div id="detailGrid" aria-label="Relationships"></div></section>
                 </div>
             </section>
         </main>
     </div>
-
     <script src="./vendor/vanillagrid.js"></script>
     <script src="./vendor/hcg-autocomplete.js"></script>
     <script type="module">
         const header = document.getElementById('header');
         const response = await fetch(`./header.html?v=${Date.now()}`, { cache: 'no-store' });
-
-        if (!response.ok)
-        {
-            throw new Error(`Unable to load header: ${response.status}`);
-        }
-
+        if (!response.ok) throw new Error(`Unable to load header: ${response.status}`);
         header.outerHTML = await response.text();
-
         const logoMenu = document.querySelector('.eb-logo-menu');
-        document.addEventListener('click', event =>
-        {
-            if (!logoMenu?.open) return;
-            if (logoMenu.contains(event.target)) return;
-            logoMenu.removeAttribute('open');
-        });
-
-        await import('./eBStatus.js').then(({ eBStatus }) =>
-        {
-            eBStatus.init();
-            window.ebStatus = eBStatus;
-        });
-
-        await import('./CFstatus.js').then(({ CFstatus }) =>
-        {
-            window.ebCFStatus = CFstatus.init();
-        });
-
+        document.addEventListener('click', event => { if (!logoMenu?.open) return; if (logoMenu.contains(event.target)) return; logoMenu.removeAttribute('open'); });
+        await import('./eBStatus.js').then(({ eBStatus }) => { eBStatus.init(); window.ebStatus = eBStatus; });
+        await import('./CFstatus.js').then(({ CFstatus }) => { window.ebCFStatus = CFstatus.init(); });
         await import('./app.js');
     </script>
 </body>
