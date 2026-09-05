@@ -30,6 +30,60 @@ function formatPropertyValue(value) {
   return String(value);
 }
 
+function labelForKey(key) {
+  return key.replace(/_id$/i, ' ID').replace(/_/g, ' ').replace(/\b\w/g, character => character.toUpperCase());
+}
+
+function translateId(key, value) {
+  if (value === null || value === undefined || value === '') return '—';
+  const id = String(value);
+  if (key === 'holon_type_id') {
+    const type = holonTypes.find(item => String(item.id) === id);
+    return type ? type.name : id;
+  }
+  if (key === 'parent_holon_id' || key === 'source_holon_id' || key === 'target_holon_id') {
+    const holon = holons.find(item => String(item.id) === id);
+    return holon ? (holon.name || '(unnamed Holon)') : id;
+  }
+  if (key === 'relationship_type_id') {
+    const type = relationshipTypes.find(item => String(item.id) === id);
+    return type ? (type.name || '(unnamed relationship)') : id;
+  }
+  return id;
+}
+
+function propertyValueForDisplay(key, value) {
+  return /_id$/i.test(key) ? translateId(key, value) : formatPropertyValue(value);
+}
+
+function isEditableHolonProperty(key) {
+  return key === 'name' || key === 'holon_type';
+}
+
+async function saveInspectorProperty(holon, key, value) {
+  const nextValue = String(value ?? '').trim();
+  if (key === 'name' && !nextValue) {
+    setStatus('Name cannot be empty', 'warn');
+    return;
+  }
+  if (nextValue === String(holon[key] ?? '')) return;
+
+  setStatus(`Updating ${labelForKey(key)}…`);
+  try {
+    await eBliss.holons.update(holon.id, { [key]: nextValue });
+    await loadModel();
+    const updated = holons.find(item => String(item.id) === String(holon.id)) || { ...holon, [key]: nextValue };
+    renderHolonInspector(updated);
+    const node = graph?.nodes?.(`[id = "${String(updated.id).replaceAll('"', '\\"')}"]`);
+    node?.select();
+    if (node?.nonempty?.()) graph.center(node);
+    setStatus(`${labelForKey(key)} updated`, 'success');
+  } catch (error) {
+    setStatus(error.message || `Unable to update ${labelForKey(key)}`, 'error');
+    renderHolonInspector(holon);
+  }
+}
+
 function renderHolonInspector(holon) {
   if (!elements.inspectorContent) return;
   elements.inspectorContent.replaceChildren();
@@ -65,9 +119,26 @@ function renderHolonInspector(holon) {
     const row = document.createElement('tr');
     const keyCell = document.createElement('th');
     keyCell.scope = 'row';
-    keyCell.textContent = key;
+    keyCell.textContent = labelForKey(key);
     const valueCell = document.createElement('td');
-    valueCell.textContent = formatPropertyValue(value);
+
+    if (isEditableHolonProperty(key)) {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = value ?? '';
+      input.title = `Edit ${labelForKey(key)}`;
+      input.addEventListener('keydown', event => {
+        if (event.key === 'Enter') { event.preventDefault(); input.blur(); }
+        if (event.key === 'Escape') { event.preventDefault(); input.value = value ?? ''; input.blur(); }
+      });
+      input.addEventListener('blur', () => saveInspectorProperty(holon, key, input.value));
+      valueCell.appendChild(input);
+    } else {
+      const display = document.createElement('span');
+      display.textContent = propertyValueForDisplay(key, value);
+      valueCell.appendChild(display);
+    }
+
     row.append(keyCell, valueCell);
     tbody.appendChild(row);
   }
