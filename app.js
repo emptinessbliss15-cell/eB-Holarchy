@@ -171,18 +171,37 @@ function openHolon(holon) {
   window.dispatchEvent(new CustomEvent('holon:selected', { detail: holon }));
 }
 
+function resolveGraphRoot(value) {
+  if (!value) return null;
+  const candidate = typeof value === 'object'
+    ? (value.value ?? value.id ?? '')
+    : value;
+  const text = String(candidate).trim();
+  if (!text) return null;
+
+  const byId = holons.find(holon => String(holon.id) === text);
+  if (byId) return byId.id;
+
+  const normalized = text.toLowerCase();
+  const byName = holons.find(holon => String(holon.name ?? '').trim().toLowerCase() === normalized);
+  return byName?.id ?? null;
+}
+
 function refreshGraphRootCombo() {
   if (!elements.graphRoot) return;
+  const currentText = elements.graphRoot.value;
   graphRootCombo?.destroy?.();
   graphRootCombo = createEBComboBox(elements.graphRoot, {
     source: holonComboOptions(holons), minChars: 0, clearable: true,
     placeholder: 'Choose a root Holon…',
-    onChange: (_input, value) => setGraphRoot(value || null),
-    onSelect: (_input, item) => {
-      const rootId = item?.value;
-      if (rootId) setGraphRoot(rootId);
-    },
+    onChange: (_input, value) => setGraphRoot(resolveGraphRoot(Array.isArray(value) ? value[0] : value)),
+    onSelect: (_input, item) => setGraphRoot(resolveGraphRoot(item)),
   });
+  const restored = resolveGraphRoot(currentText);
+  if (restored) {
+    const selected = holons.find(holon => String(holon.id) === String(restored));
+    elements.graphRoot.value = selected?.name || '';
+  }
 }
 
 function holonTypeOptions(selected = '') {
@@ -285,11 +304,14 @@ async function createRelationship() {
 async function loadModel() {
   setStatus('Loading Holon model…');
   try {
+    const previousRootText = elements.graphRoot?.value || '';
+    const previousRootId = resolveGraphRoot(previousRootText);
     const model = await loadHolons(eBliss);
     holons = model.holons; relationships = model.relationships; relationshipTypes = model.relationshipTypes; holonTypes = model.holonTypes || [];
-    if (!graph) graph = createHolonGraph({ element: elements.graph, holons, relationships, relationshipTypes, rootId: null, onSelect: selectHolonInInspector });
+    if (!graph) graph = createHolonGraph({ element: elements.graph, holons, relationships, relationshipTypes, rootId: previousRootId, onSelect: selectHolonInInspector });
     else updateHolonGraph({ holons, relationships, relationshipTypes });
     refreshGraphRootCombo();
+    if (previousRootId) setGraphRoot(previousRootId);
     setStatus(`${holons.length} Holons · ${relationships.length} relationships`, 'success');
   } catch (error) { setStatus(error.message || 'Unable to load Holon model', 'error'); }
 }
@@ -301,17 +323,15 @@ async function applySession(session) {
   if (user) return loadModel();
   holons = []; relationships = []; relationshipTypes = []; holonTypes = [];
   destroyHolonGraph(); graph = null; graphRootCombo?.destroy?.(); graphRootCombo = null;
-  if (elements.inspectorContent) elements.inspectorContent.replaceChildren();
+  if (elements.graphRoot) elements.graphRoot.value = '';
+  renderHolonInspector(null);
 }
 
-initAuth({ api: eBliss, container: elements.auth, onSession: applySession, setStatus });
+if (elements.refresh) elements.refresh.addEventListener('click', () => loadModel());
+if (elements.refreshApp) elements.refreshApp.addEventListener('click', () => loadModel());
+if (elements.debugApp) elements.debugApp.addEventListener('click', () => setStatus(`${holons.length} Holons · ${relationships.length} relationships · ${holonTypes.length} types`));
+if (elements.newHolon) elements.newHolon.addEventListener('click', () => createHolon());
+if (elements.newHolonType) elements.newHolonType.addEventListener('click', () => createHolonType());
+if (elements.newRelationship) elements.newRelationship.addEventListener('click', () => createRelationship());
 
-elements.refresh?.addEventListener('click', loadModel);
-elements.refreshApp?.addEventListener('click', () => window.location.reload());
-elements.debugApp?.addEventListener('click', () => debugger);
-elements.newHolon?.addEventListener('click', () => createHolon());
-elements.newRelationship?.addEventListener('click', createRelationship);
-elements.newHolonType?.addEventListener('click', createHolonType);
-elements.testStatusSuccess?.addEventListener('click', () => setStatus('Success test', 'success'));
-elements.testStatusWarn?.addEventListener('click', () => setStatus('Warning test', 'warn'));
-elements.testStatusError?.addEventListener('click', () => setStatus('Error test', 'error'));
+initAuth({ api: eBliss, container: elements.auth, onSession: applySession, setStatus });
