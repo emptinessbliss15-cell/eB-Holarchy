@@ -63,6 +63,7 @@ function descendants(rootId, holons, relationships) {
     const depth = distance.get(current);
     if (currentDepth !== 'all' && depth >= Number(currentDepth)) continue;
     for (const relationship of relationships) {
+      // Holarchy relationships store the child as source and its parent as target.
       if (String(relationship.target_holon_id) !== current) continue;
       const child = String(relationship.source_holon_id);
       if (distance.has(child)) continue;
@@ -76,7 +77,11 @@ function descendants(rootId, holons, relationships) {
 function visibleModel() {
   const holons = descendants(currentRootId, currentModel.holons, currentModel.relationships);
   const ids = new Set(holons.map(holon => String(holon.id)));
-  return { holons, relationships: currentModel.relationships.filter(r => ids.has(String(r.source_holon_id)) && ids.has(String(r.target_holon_id))), relationshipTypes: currentModel.relationshipTypes };
+  return {
+    holons,
+    relationships: currentModel.relationships.filter(r => ids.has(String(r.source_holon_id)) && ids.has(String(r.target_holon_id))),
+    relationshipTypes: currentModel.relationshipTypes,
+  };
 }
 
 function normalizeStatus(status) {
@@ -149,9 +154,21 @@ function installNavigation() {
 function render() {
   if (!cy) return;
   const model = visibleModel();
-  cy.elements().remove();
-  cy.add(buildElements(model.holons, model.relationships, model.relationshipTypes));
-  if (model.holons.length) cy.layout({ name: 'cose', animate: false, fit: true, padding: 40 }).run();
+  const elements = buildElements(model.holons, model.relationships, model.relationshipTypes);
+
+  // Replace the filtered model in one Cytoscape batch. This avoids leaving the
+  // renderer in an empty/intermediate state while changing the graph root.
+  cy.batch(() => {
+    cy.elements().remove();
+    if (elements.length) cy.add(elements);
+  });
+
+  if (model.holons.length) {
+    cy.layout({ name: 'cose', animate: false, fit: true, padding: 40 }).run();
+    // A root-filtered graph may contain only one node; explicitly fitting keeps
+    // that node visible instead of relying on the layout's fit behavior.
+    cy.fit(cy.nodes(), 40);
+  }
   updateNavigationButton();
 }
 
