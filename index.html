@@ -24,14 +24,17 @@
         .holon-property-table th, .holon-property-table td { padding: 7px 6px; border-bottom: 1px solid var(--eb-border); text-align: left; vertical-align: top; overflow-wrap: anywhere; }
         .holon-property-table th { width: 38%; font-size: 12px; opacity: .7; font-weight: 600; }
         .holon-property-table td { white-space: pre-wrap; font-size: 13px; }
-        .holarchy-filter { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: 2px; }
+        .holarchy-heading { align-items: flex-start; flex-wrap: wrap; }
+        .holarchy-heading h3 { flex: 0 0 auto; }
+        .holarchy-filter { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-left: 2px; min-width: 0; }
         .holarchy-filter-field { display: flex; align-items: center; gap: 5px; }
         .holarchy-filter-field > span { font-size: 12px; font-weight: 600; opacity: .72; }
         .holarchy-filter #graphRoot { width: 220px; }
-        .holarchy-filter #graphDepth { display: inline-block; width: 68px; min-width: 68px; height: 32px; padding: 4px 7px; border: 1px solid var(--eb-border-strong); border-radius: 5px; background: var(--eb-input-bg); color: var(--eb-text); }
+        .holarchy-filter #graphDepth { display: inline-block !important; width: 68px; min-width: 68px; height: 32px; padding: 4px 7px; border: 1px solid var(--eb-border-strong); border-radius: 5px; background: var(--eb-input-bg); color: var(--eb-text); }
         .holarchy-filter-field:has(#graphDepth) { flex: 0 0 auto; white-space: nowrap; }
         @media (max-width: 760px) {
             .workspace-primary { grid-template-columns: 1fr; }
+            .holarchy-heading { align-items: stretch; }
             .holarchy-filter { margin-left: 0; width: 100%; }
             .holarchy-filter #graphRoot { width: 100%; min-width: 180px; }
         }
@@ -45,20 +48,22 @@
             <section id="app" class="card" hidden>
                 <div class="workspace-grid workspace-primary">
                     <section class="panel panel-graph">
-                        <div class="panel-heading">
-                            <div style="display:flex;align-items:center;gap:10px;min-width:0;">
-                                <h3 style="margin:0;white-space:nowrap;">Holarchy</h3>
-                                <div class="holarchy-filter" role="group" aria-label="Holarchy filters">
-                                    <div class="holarchy-filter-field">
-                                        <span>Root</span>
-                                        <input id="graphRoot" type="text" autocomplete="off" aria-label="Holarchy graph root" placeholder="Choose a root Holon…">
-                                    </div>
-                                    <div class="holarchy-filter-field">
-                                        <span>Depth</span>
-                                        <select id="graphDepth" aria-label="Holarchy graph depth">
-                                            <option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option><option value="all">∞</option>
-                                        </select>
-                                    </div>
+                        <div class="panel-heading holarchy-heading">
+                            <h3>Holarchy</h3>
+                            <div class="holarchy-filter" role="group" aria-label="Holarchy filters">
+                                <div class="holarchy-filter-field">
+                                    <span>Root</span>
+                                    <input id="graphRoot" type="text" autocomplete="off" aria-label="Holarchy graph root" placeholder="Choose a root Holon…">
+                                </div>
+                                <div class="holarchy-filter-field">
+                                    <span>Depth</span>
+                                    <select id="graphDepth" aria-label="Holarchy graph depth">
+                                        <option value="1">1</option>
+                                        <option value="2" selected>2</option>
+                                        <option value="3">3</option>
+                                        <option value="4">4</option>
+                                        <option value="all">∞</option>
+                                    </select>
                                 </div>
                             </div>
                         </div>
@@ -87,7 +92,7 @@
         document.addEventListener('click', event => { if (!logoMenu?.open) return; if (logoMenu.contains(event.target)) return; logoMenu.removeAttribute('open'); });
         await import('./eBStatus.js').then(({ eBStatus }) => { eBStatus.init(); window.ebStatus = eBStatus; });
         await import('./CFstatus.js').then(({ CFstatus }) => { window.ebCFStatus = CFstatus.init(); });
-        await import('./app.js');
+        await import(`./app.js?v=${Date.now()}`);
     </script>
 </body>
 </html>
