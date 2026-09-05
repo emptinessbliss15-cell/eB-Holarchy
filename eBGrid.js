@@ -44,10 +44,25 @@ export class eBGrid {
     this._cancelCustomEditor();
 
     const originalValue = row[column.key] ?? '';
-    const input = document.createElement('input');
-    input.type = 'text';
+    // Long/free-form values are much easier to edit in a multiline control.
+    // Keep short values as the compact single-line editor used elsewhere.
+    const isLongText = editor.type === 'textarea'
+      || (editor.type === 'text' && String(originalValue).length > 100);
+    const input = document.createElement(isLongText ? 'textarea' : 'input');
+    if (!isLongText) input.type = 'text';
     input.value = String(originalValue);
-    input.className = 'vg-edit-input';
+    input.className = isLongText ? 'vg-edit-textarea' : 'vg-edit-input';
+    if (isLongText) {
+      const lineCount = String(originalValue).split(/\r?\n/).length;
+      input.rows = editor.rows ?? Math.min(12, Math.max(6, lineCount));
+      input.wrap = 'soft';
+      input.style.width = '100%';
+      input.style.minHeight = '7rem';
+      input.style.boxSizing = 'border-box';
+      input.style.resize = 'vertical';
+      input.style.whiteSpace = 'pre-wrap';
+      input.style.overflow = 'auto';
+    }
     cell.replaceChildren(input);
 
     let finished = false;
@@ -67,7 +82,9 @@ export class eBGrid {
     const commit = (value) => {
       if (finished) return;
       finished = true;
-      const nextValue = String(value ?? '').trim();
+      const nextValue = isLongText
+        ? String(value ?? '')
+        : String(value ?? '').trim();
       cleanup();
       if (nextValue === String(originalValue)) {
         this.grid.refresh();
@@ -101,7 +118,7 @@ export class eBGrid {
       input.value = String(editor.value ?? originalValue);
       input.focus();
       input.select();
-    } else if (editor.type === 'text') {
+    } else if (editor.type === 'text' || editor.type === 'textarea') {
       input.focus();
       input.select();
     }
@@ -111,16 +128,17 @@ export class eBGrid {
         event.preventDefault();
         event.stopPropagation();
         cancel();
-      } else if (event.key === 'Enter' && editor.type === 'text') {
+      } else if (event.key === 'Enter' && !isLongText) {
+        event.preventDefault();
+        commit(input.value);
+      } else if (event.key === 'Enter' && isLongText && (event.ctrlKey || event.metaKey)) {
         event.preventDefault();
         commit(input.value);
       }
     });
 
     input.addEventListener('blur', () => {
-      // A combobox commits through onSelect; a plain custom text editor commits
-      // its current value when focus leaves the cell.
-      if (!finished && editor.type === 'text') commit(input.value);
+      if (!finished && (editor.type === 'text' || editor.type === 'textarea')) commit(input.value);
     });
   }
 
