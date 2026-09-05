@@ -24,15 +24,15 @@
         .holon-property-table th, .holon-property-table td { padding: 7px 6px; border-bottom: 1px solid var(--eb-border); text-align: left; vertical-align: top; overflow-wrap: anywhere; }
         .holon-property-table th { width: 38%; font-size: 12px; opacity: .7; font-weight: 600; }
         .holon-property-table td { white-space: pre-wrap; font-size: 13px; }
-        .holarchy-heading { align-items: flex-start; justify-content: flex-start !important; flex-wrap: wrap; }
-        .holarchy-heading h3 { flex: 0 0 auto; }
-        .holarchy-filter { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-left: 2px; min-width: 0; }
-        .holarchy-filter-field { display: flex; align-items: center; gap: 5px; }
+        .holarchy-heading { align-items: center; flex-wrap: wrap; justify-content: flex-start !important; }
+        .holarchy-heading h3 { flex: 0 0 auto; margin-right: 2px; }
+        .holarchy-filter { display: flex; align-items: center; gap: 0; flex-wrap: wrap; margin-left: 0; min-width: 0; padding: 3px 6px; border: 1px solid var(--eb-border-strong); border-radius: 7px; background: var(--eb-input-bg); }
+        .holarchy-filter-field { display: flex; align-items: center; gap: 5px; padding: 2px 7px; }
         .holarchy-filter-field > span { font-size: 12px; font-weight: 600; opacity: .72; }
-        .holarchy-filter #graphRoot { width: 220px; }
-        .holarchy-filter #graphDepth { display: inline-block !important; width: 68px; min-width: 68px; height: 32px; padding: 4px 7px; border: 1px solid var(--eb-border-strong); border-radius: 5px; background: var(--eb-input-bg); color: var(--eb-text); }
+        .holarchy-filter #graphRoot { width: 220px; border: 0; background: transparent; box-shadow: none; }
+        .holarchy-filter #graphDepth { display: inline-block !important; width: 68px; min-width: 68px; height: 30px; padding: 3px 7px; border: 0; border-radius: 4px; background: transparent; color: var(--eb-text); box-shadow: none; }
         .holarchy-filter-field:has(#graphDepth) { flex: 0 0 auto; white-space: nowrap; }
-        .holarchy-filter-prov { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+        .holarchy-filter-prov { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; padding: 2px 7px; }
         .holarchy-filter-prov label { font-size: 12px; font-weight: 600; opacity: .72; cursor: pointer; }
         .holarchy-filter-prov input { margin: 0; accent-color: var(--eb-accent, #5b8def); }
         @media (max-width: 760px) {
