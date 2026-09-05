@@ -98,7 +98,7 @@ export function createHolonGraph({ element, holons, relationships, relationshipT
     { selector: 'edge:selected', style: { 'line-color': '#f59e0b', 'target-arrow-color': '#f59e0b', width: 3 } },
   ] });
   cy.on('tap', 'node', event => { const id = String(event.target.data('holonId')); emitSelection(currentModel.holons.find(item => String(item.id) === id) || null); });
-  cy.on('dbltap', 'node', event => { const id = String(event.target.data('holonId')); if (!currentModel.holons.some(item => String(item.id) === id)) return; currentRootId = id; const control = document.getElementById('graphRoot'); if (control) control.value = currentModel.holons.find(item => String(item.id) === id)?.name || ''; render(); const node = cy.nodes(`[id = "${id.replaceAll('"', '\\"')}"]`); node.select(); emitSelection(currentModel.holons.find(item => String(item.id) === id) || null); });
+  cy.on('dbltap', 'node', event => { const id = String(event.target.data('holonId')); if (!currentModel.holons.some(item => String(item.id) === id)) return; currentRootId = id; const control = document.getElementById('graphRoot'); if (control) control.value = currentModel.holons.find(item => String(item.id) === id)?.name || ''; render(); const node = cy.nodes(`[id = \"${id.replaceAll('"', '\\\"')}\"]`); node.select(); emitSelection(currentModel.holons.find(item => String(item.id) === id) || null); });
   cy.on('click', 'node', event => { const id = String(event.target.data('holonId')); emitSelection(currentModel.holons.find(item => String(item.id) === id) || null); });
   cy.on('tap', event => { if (event.target === cy) emitSelection(null); });
   return cy;
@@ -109,6 +109,15 @@ export function setGraphRoot(rootId) {
   currentRootId = normalized && currentModel.holons.some(holon => String(holon.id) === normalized) ? normalized : null;
   render();
 }
+
+export function getGraphRoot() { return currentRootId; }
+
+export function getGraphParent() {
+  if (!currentRootId) return null;
+  const relationship = currentModel.relationships.find(item => String(item.source_holon_id) === String(currentRootId));
+  return relationship?.target_holon_id ?? null;
+}
+
 export function setGraphDepth(depth) { currentDepth = depth || 'all'; render(); }
 export function updateHolonGraph(model) { if (!cy) return; currentModel = model || { holons: [], relationships: [], relationshipTypes: [] }; if (currentRootId && !currentModel.holons.some(h => String(h.id) === String(currentRootId))) currentRootId = null; render(); }
 export function destroyHolonGraph() { cy?.destroy(); cy = null; currentRootId = null; selectionHandler = null; currentModel = { holons: [], relationships: [], relationshipTypes: [] }; }
