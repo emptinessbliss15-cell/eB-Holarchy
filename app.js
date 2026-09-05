@@ -12,6 +12,7 @@ import { showModal } from './eBModal.js';
 const status = eBStatus;
 const elements = {
   app: document.getElementById('app'), auth: document.getElementById('auth'), graph: document.getElementById('holonGraph'), graphRoot: document.getElementById('graphRoot'),
+  inspector: document.getElementById('holonInspector'), inspectorContent: document.getElementById('holonInspectorContent'),
   refresh: document.getElementById('refresh'), refreshApp: document.getElementById('refreshApp'), debugApp: document.getElementById('debugApp'),
   newHolon: document.getElementById('newHolon'), newRelationship: document.getElementById('newRelationship'), newHolonType: document.getElementById('newHolonType'),
   testStatusSuccess: document.getElementById('testStatusSuccess'), testStatusWarn: document.getElementById('testStatusWarn'), testStatusError: document.getElementById('testStatusError'),
@@ -21,9 +22,76 @@ let graph = null, graphRootCombo = null;
 
 function setStatus(text, level = 'info') { if (!text) return status.clear(); status[level](text); }
 
+function formatPropertyValue(value) {
+  if (value === null || value === undefined || value === '') return '—';
+  if (typeof value === 'object') {
+    try { return JSON.stringify(value, null, 2); } catch { return String(value); }
+  }
+  return String(value);
+}
+
+function renderHolonInspector(holon) {
+  if (!elements.inspectorContent) return;
+  elements.inspectorContent.replaceChildren();
+
+  if (!holon) {
+    const empty = document.createElement('div');
+    empty.className = 'muted';
+    empty.textContent = 'Select a Holon to inspect its properties.';
+    elements.inspectorContent.appendChild(empty);
+    return;
+  }
+
+  const title = document.createElement('div');
+  title.className = 'holon-inspector-title';
+  title.textContent = holon.name || '(unnamed Holon)';
+  elements.inspectorContent.appendChild(title);
+
+  const actions = document.createElement('div');
+  actions.className = 'holon-inspector-actions';
+  const editButton = document.createElement('button');
+  editButton.type = 'button';
+  editButton.textContent = 'Edit Holon';
+  editButton.addEventListener('click', () => editHolon(holon));
+  actions.appendChild(editButton);
+  elements.inspectorContent.appendChild(actions);
+
+  const table = document.createElement('table');
+  table.className = 'holon-property-table';
+  const tbody = document.createElement('tbody');
+
+  for (const [key, value] of Object.entries(holon)) {
+    if (key === 'children') continue;
+    const row = document.createElement('tr');
+    const keyCell = document.createElement('th');
+    keyCell.scope = 'row';
+    keyCell.textContent = key;
+    const valueCell = document.createElement('td');
+    valueCell.textContent = formatPropertyValue(value);
+    tbody.append(keyCell, valueCell);
+    table.appendChild(row);
+  }
+
+  if (!tbody.children.length) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 2;
+    cell.className = 'muted';
+    cell.textContent = 'No properties available.';
+    row.appendChild(cell);
+    tbody.appendChild(row);
+  }
+
+  table.appendChild(tbody);
+  elements.inspectorContent.appendChild(table);
+}
+
 function openHolon(holon) {
   if (!holon) return;
-  graph?.nodes?.(`[id = "${String(holon.id).replaceAll('"', '\\"')}"]`).select();
+  const node = graph?.nodes?.(`[id = "${String(holon.id).replaceAll('"', '\\"')}"]`);
+  node?.select();
+  if (node?.nonempty?.()) graph.center(node);
+  renderHolonInspector(holon);
   window.dispatchEvent(new CustomEvent('holon:selected', { detail: holon }));
 }
 
@@ -157,8 +225,18 @@ async function applySession(session) {
   if (user) return loadModel();
   holons = []; relationships = []; relationshipTypes = []; holonTypes = [];
   destroyHolonGraph(); graph = null; graphRootCombo?.destroy?.(); graphRootCombo = null;
+  renderHolonInspector(null);
   setStatus('Sign in to open the Holon Workspace');
 }
+
+window.addEventListener('holon:selected', event => {
+  const holon = event.detail || null;
+  renderHolonInspector(holon);
+  if (!holon) return;
+  const node = graph?.nodes?.(`[id = "${String(holon.id).replaceAll('"', '\\"')}"]`);
+  node?.select();
+  if (node?.nonempty?.()) graph.center(node);
+});
 
 elements.refresh?.addEventListener('click', loadModel);
 elements.newHolon?.addEventListener('click', () => createHolon());
