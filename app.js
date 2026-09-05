@@ -99,7 +99,14 @@ function renderHolonInspector(holon) {
     data: rows,
     columns: [
       { key: 'property', label: 'Property', sortable: true },
-      { key: 'value', label: 'Value', sortable: true },
+      {
+        key: 'value',
+        label: 'Value',
+        sortable: true,
+        editor: row => row.key === 'holon_type'
+          ? { type: 'combobox', options: holonTypeOptions(holon.holon_type), value: holon.holon_type, minChars: 0, allowCustom: false }
+          : null,
+      },
     ],
     pageSize: Math.max(rows.length, 10),
     pagination: false,
