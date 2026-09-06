@@ -131,6 +131,25 @@ function build(container)
   renderLog();
 }
 
+function labelForField(field)
+{
+  return String(field ?? '')
+    .replace(/_id$/i, ' ID')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, character => character.toUpperCase());
+}
+
+function formatUpdatedValue(value)
+{
+  if (value === null || value === undefined || value === '') return '—';
+  if (typeof value === 'object')
+  {
+    try { return JSON.stringify(value, null, 2); }
+    catch { return String(value); }
+  }
+  return String(value);
+}
+
 export const eBStatus = {
   init(container = document.getElementById('status'))
   {
@@ -146,6 +165,11 @@ export const eBStatus = {
   success(message)
   {
     addEntry(message, 'success');
+  },
+
+  updated(field, value)
+  {
+    addEntry(`${labelForField(field)}: "${formatUpdatedValue(value)}"`, 'success');
   },
 
   warn(message)
