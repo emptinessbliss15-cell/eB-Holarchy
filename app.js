@@ -150,6 +150,6 @@ async function loadModel() { const model = await loadHolons(eBliss); holons = mo
 
 function wireUI() { installGraphDepthControl(); elements.newHolon?.addEventListener('click', () => void createHolon()); elements.newRelationship?.addEventListener('click', () => void createRelationship()); elements.newHolonType?.addEventListener('click', () => void createHolonType()); elements.refresh?.addEventListener('click', () => void loadModel()); elements.refreshApp?.addEventListener('click', () => window.location.reload()); elements.debugApp?.addEventListener('click', () => console.log({ holons, relationships, relationshipTypes, holonTypes })); }
 
-async function start() { wireUI(); try { await initAuth({ api: eBliss, container: elements.auth, onSession: async session => { elements.app.hidden = !session; if (session) { if (!graph) graph = createHolonGraph(elements.graph, { onSelect: openHolon, onDoubleClick: openHolon }); await loadModel(); } }, setStatus }); } catch (error) { setStatus(error.message || 'Unable to start application', 'error'); } }
+async function start() { wireUI(); try { await initAuth({ api: eBliss, container: elements.auth, onSession: async session => { elements.app.hidden = !session; if (session) { if (!graph) graph = createHolonGraph({ element: elements.graph, holons, relationships, relationshipTypes, onSelect: openHolon }); await loadModel(); } }, setStatus }); } catch (error) { setStatus(error.message || 'Unable to start application', 'error'); } }
 
 start();
