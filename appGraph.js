@@ -97,6 +97,7 @@ async function createHolon(prefillName = '', prefillType = '') {
     { name: 'parent_holon_id', label: 'Parent Holon', type: 'combobox', options: holonOptions(true), value: '' },
     { name: 'position', label: 'Position', type: 'number', value: '0' },
   ] });
+  
   if (!values?.name?.trim()) return null;
   if ((values.relationship_type_id && !values.parent_holon_id) || (!values.relationship_type_id && values.parent_holon_id)) {
     setStatus('Choose both an initial relationship and a parent Holon, or leave both empty', 'warn'); return null;
