@@ -76,8 +76,10 @@ button { cursor: pointer; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
 .panel-heading h3 { margin: 0; }
 .panel-heading .muted { font-size: 12px; }
-.panel-actions { flex: 0 0 auto; margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.panel-actions { flex: 0 0 auto; margin-left: auto; display: flex !important; flex-direction: row !important; align-items: center; gap: 8px; white-space: nowrap; }
 .panel-actions button { flex: 0 0 auto; }
+.workspace-grids .panel-heading { display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; align-items: center; justify-content: space-between; }
+.workspace-grids .panel-heading h3 { flex: 0 0 auto; margin: 0 !important; }
 .panel { min-width: 0; }
 .panel h3 { margin: 0 0 8px; }
 #grid { min-height: 420px; }
