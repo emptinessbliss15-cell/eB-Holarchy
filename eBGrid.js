@@ -14,11 +14,11 @@ export class eBGrid {
     this.options = options;
     this.grid = new VanillaGrid(element, options);
 
-    // eBGrid-level editors run before VanillaGrid's keyboard editor. This lets
-    // semantic components such as eBComboBox participate in inline editing
-    // without making the generic VanillaGrid depend on eBliss components.
     if (options.editableRows) {
       this._onKeyDownCapture = (event) => {
+        // An active custom editor owns its keyboard. Otherwise Enter was being
+        // caught here again before the editor could commit its value.
+        if (this._customEditor?.input === event.target) return;
         if (event.key !== 'Enter' && event.key !== 'F2') return;
         const cell = event.target.closest?.('td[data-column-key]');
         if (!cell || !this.element.contains(cell)) return;
@@ -44,8 +44,6 @@ export class eBGrid {
     this._cancelCustomEditor();
 
     const originalValue = row[column.key] ?? '';
-    // Long/free-form values are much easier to edit in a multiline control.
-    // Keep short values as the compact single-line editor used elsewhere.
     const isLongText = editor.type === 'textarea'
       || (editor.type === 'text' && String(originalValue).length > 100);
     const input = document.createElement(isLongText ? 'textarea' : 'input');
@@ -101,7 +99,7 @@ export class eBGrid {
       restore();
     };
 
-    this._customEditor = { cancel };
+    this._customEditor = { cancel, input };
 
     if (editor.type === 'combobox') {
       combo = createEBComboBox(input, {
@@ -127,19 +125,23 @@ export class eBGrid {
       if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
+        event.stopImmediatePropagation();
         cancel();
       } else if (event.key === 'Enter' && !isLongText) {
         event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
         commit(input.value);
       } else if (event.key === 'Enter' && isLongText && (event.ctrlKey || event.metaKey)) {
         event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
         commit(input.value);
       }
     });
 
-    input.addEventListener('blur', () => {
-      if (!finished && (editor.type === 'text' || editor.type === 'textarea')) commit(input.value);
-    });
+    // Editing is explicit: Enter commits, Escape cancels. Blur must not cause
+    // an accidental save while we work on the more deliberate keyboard flow.
   }
 
   _cancelCustomEditor() {
