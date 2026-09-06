@@ -53,6 +53,10 @@
         <div id="status"></div>
         <main class="eb-main">
             <section id="app" class="card" hidden>
+                <div class="workspace-grid workspace-grids">
+                    <section class="panel holons-panel"><div class="panel-heading"><h3>Holons</h3><div class="panel-actions"><button id="newHolon" type="button">+ Holon</button><button id="newHolonType" type="button">+ Type</button></div></div><div id="grid" aria-label="Holons"></div></section>
+                    <section class="panel"><h3 id="activeList">Relationships</h3><div class="muted" id="listMode"></div><div id="detailGrid" aria-label="Relationships"></div></section>
+                </div>
                 <div class="workspace-grid workspace-primary">
                     <section class="panel panel-graph">
                         <div class="panel-heading holarchy-heading">
@@ -84,10 +88,6 @@
                         <div class="panel-heading"><h3>Holon Properties</h3></div>
                         <div id="holonInspectorContent" class="muted">Select a Holon to inspect its properties.</div>
                     </aside>
-                </div>
-                <div class="workspace-grid workspace-grids">
-                    <section class="panel holons-panel"><div class="panel-heading"><h3>Holons</h3><div class="panel-actions"><button id="newHolon" type="button">+ Holon</button><button id="newHolonType" type="button">+ Type</button></div></div><div id="grid" aria-label="Holons"></div></section>
-                    <section class="panel"><h3 id="activeList">Relationships</h3><div class="muted" id="listMode"></div><div id="detailGrid" aria-label="Relationships"></div></section>
                 </div>
             </section>
         </main>
