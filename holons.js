@@ -1,6 +1,5 @@
 export async function loadHolons(api)
 {
-  debugger;
   return api.model.load();
 }
 
