@@ -16,15 +16,14 @@ export class eBGrid {
 
     if (options.editableRows) {
       this._onKeyDownCapture = (event) => {
-        // An active custom editor owns its keyboard. Otherwise Enter was being
-        // caught here again before the editor could commit its value.
         if (this._customEditor?.input === event.target) return;
         if (event.key !== 'Enter' && event.key !== 'F2') return;
         const cell = event.target.closest?.('td[data-column-key]');
         if (!cell || !this.element.contains(cell)) return;
         const rowElement = cell.closest('tr[data-rowid]');
         if (!rowElement) return;
-        const row = this.grid.rowById?.get(Number(rowElement.dataset.rowid));
+        const rowId = rowElement.dataset.rowid;
+        const row = this.grid.rowById?.get(rowId) ?? this.grid.rowById?.get(Number(rowId));
         const column = this.options.columns?.find(item => item.key === cell.dataset.columnKey);
         if (!row || !column || typeof column.editor !== 'function') return;
 
@@ -139,9 +138,6 @@ export class eBGrid {
         commit(input.value);
       }
     });
-
-    // Editing is explicit: Enter commits, Escape cancels. Blur must not cause
-    // an accidental save while we work on the more deliberate keyboard flow.
   }
 
   _cancelCustomEditor() {
