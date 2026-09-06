@@ -14,6 +14,7 @@
     <style>
         .workspace-primary { grid-template-columns: minmax(0, 1fr) minmax(280px, 360px); align-items: stretch; }
         .workspace-primary .panel-graph { grid-column: auto; }
+        .workspace-grids { grid-template-columns: minmax(0, 1fr); }
         .holon-inspector { min-height: 460px; padding: 0 0 12px; overflow: hidden; }
         .holon-inspector > .panel-heading { padding: 14px 14px 8px; margin: 0; border-bottom: 1px solid var(--eb-border); }
         #holonInspectorContent { padding: 12px 14px; overflow: auto; max-height: 410px; }
@@ -55,7 +56,6 @@
             <section id="app" class="card" hidden>
                 <div class="workspace-grid workspace-grids">
                     <section class="panel holons-panel"><div class="panel-heading"><h3>Holons</h3><div class="panel-actions"><button id="newHolon" type="button">+ Holon</button><button id="newHolonType" type="button">+ Type</button></div></div><div id="grid" aria-label="Holons"></div></section>
-                    <section class="panel"><h3 id="activeList">Relationships</h3><div class="muted" id="listMode"></div><div id="detailGrid" aria-label="Relationships"></div></section>
                 </div>
                 <div class="workspace-grid workspace-primary">
                     <section class="panel panel-graph">
