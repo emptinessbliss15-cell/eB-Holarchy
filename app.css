@@ -58,7 +58,6 @@ button { cursor: pointer; }
 .eb-status-current[data-level="error"], .status-log-entry[data-level="error"] { background: #f8d7da !important; color: #842029; }
 .eb-status-message { opacity: .75; }
 .cf-build-status { font-size: 12px; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
-.cf-build-dot { font-size: 11px; }
 .status-log-dialog { width: min(700px,calc(100vw - 32px)); max-height: min(70vh,600px); padding: 0; border: 1px solid var(--eb-border-strong); border-radius: 8px; background: var(--eb-surface); color: var(--eb-text); box-shadow: 0 8px 30px rgba(0,0,0,.2); }
 .status-log-dialog::backdrop { background: var(--eb-overlay); }
 .status-log-header { position: sticky; top: 0; display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid var(--eb-border); background: var(--eb-surface); }
@@ -77,6 +76,8 @@ button { cursor: pointer; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
 .panel-heading h3 { margin: 0; }
 .panel-heading .muted { font-size: 12px; }
+.panel-actions { flex: 0 0 auto; margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.panel-actions button { flex: 0 0 auto; }
 .panel { min-width: 0; }
 .panel h3 { margin: 0 0 8px; }
 #grid { min-height: 420px; }
@@ -155,4 +156,4 @@ button { cursor: pointer; }
   .hcg-autocomplete-option.is-disabled { cursor: not-allowed; }
 }
 
-@media (max-width: 760px) { .eb-header-inner { grid-template-columns: auto 1fr; justify-items: start; } .eb-brand, .eb-app-name, .eb-row { grid-column: 2; } .eb-app-name { text-align: left; } .eb-row { justify-content: flex-start; } .eb-status { grid-template-columns: 1fr; } .eb-navigation { grid-template-columns: 1fr; } .eb-tree { border-right: 0; border-bottom: 1px solid var(--eb-border); max-height: 35vh; } .workspace-grid { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .eb-header-inner { grid-template-columns: auto 1fr; justify-items: start; } .eb-brand, .eb-app-name, .eb-row { grid-column: 2; } .eb-app-name { text-align: left; } .eb-row { justify-content: flex-start; } .eb-status { grid-template-columns: 1fr; } .eb-navigation { grid-template-columns: 1fr; } .eb-tree { border-right: 0; border-bottom: 1px solid var(--eb-border); max-height: 35vh; } .workspace-grid { grid-template-columns: 1fr; } .panel-actions { margin-left: auto; } }
