@@ -4,111 +4,107 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>eB Lists</title>
-    <link rel="icon" type="image/x-icon" href="./img/favicon">
     <link rel="icon" type="image/png" sizes="48x48" href="./img/favicon48.png">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./vendor/cytoscape.min.js"></script>
     <link rel="stylesheet" href="./vendor/vanillagrid.css">
     <link rel="stylesheet" href="./vendor/hcg-autocomplete.css">
     <link rel="stylesheet" href="./app.css">
+    <link rel="stylesheet" href="./holonInspector.css">
+    <style>
+        .workspace-primary { grid-template-columns: minmax(0, 1fr) minmax(280px, 360px); align-items: stretch; }
+        .workspace-primary .panel-graph { grid-column: auto; }
+        .workspace-grids { grid-template-columns: minmax(0, 1fr); }
+        #grid { min-height: 0; }
+        .holon-inspector { min-height: 460px; padding: 0 0 12px; overflow: hidden; }
+        .holon-inspector > .panel-heading { padding: 14px 14px 8px; margin: 0; border-bottom: 1px solid var(--eb-border); }
+        #holonInspectorContent { padding: 12px 14px; overflow: auto; max-height: 410px; }
+        .holon-inspector-title { font-size: 18px; font-weight: 700; margin-bottom: 10px; overflow-wrap: anywhere; }
+        .holon-inspector-actions { display: flex; gap: 8px; margin-bottom: 12px; }
+        .holon-inspector-actions button { padding: 7px 10px; border: 1px solid var(--eb-border-strong); border-radius: 5px; background: var(--eb-input-bg); color: var(--eb-text); }
+        .holon-property-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        .holon-property-table th, .holon-property-table td { padding: 7px 6px; border-bottom: 1px solid var(--eb-border); text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+        .holon-property-table th { width: 38%; font-size: 12px; opacity: .7; font-weight: 600; }
+        .holon-property-table td { white-space: pre-wrap; font-size: 13px; }
+        .holarchy-heading { align-items: center; flex-wrap: wrap; justify-content: flex-start !important; }
+        .holarchy-heading h3 { flex: 0 0 auto; margin-right: 2px; }
+        .holarchy-filter { display: flex; align-items: center; gap: 0; flex-wrap: wrap; margin-left: 0; min-width: 0; padding: 3px 6px; border: 1px solid var(--eb-border-strong, #888); border-radius: 7px; background: var(--eb-input-bg); box-sizing: border-box; }
+        .holarchy-filter-field { display: flex; align-items: center; gap: 5px; padding: 2px 7px; }
+        .holarchy-filter-field > span { font-size: 12px; font-weight: 600; opacity: .72; }
+        .holarchy-filter #graphRoot { width: 220px; border: 0; background: transparent; box-shadow: none; }
+        .holarchy-filter #graphDepth { display: inline-block !important; width: 68px; min-width: 68px; height: 30px; padding: 3px 7px; border: 0; border-radius: 4px; background: transparent; color: var(--eb-text); box-shadow: none; }
+        .holarchy-filter-field:has(#graphDepth) { flex: 0 0 auto; white-space: nowrap; }
+        .holarchy-filter-prov { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; padding: 2px 7px; }
+        .holarchy-filter-prov label { font-size: 12px; font-weight: 600; opacity: .72; cursor: pointer; }
+        .holarchy-filter-prov input { margin: 0; accent-color: var(--eb-accent, #5b8def); }
+        .holons-panel > .panel-heading { display: grid !important; grid-template-columns: minmax(0, 1fr) max-content !important; align-items: center !important; gap: 12px !important; width: 100% !important; margin-bottom: 8px !important; }
+        .holons-panel > .panel-heading > h3 { min-width: 0 !important; margin: 0 !important; }
+        .holons-panel > .panel-heading > .panel-actions { display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important; justify-content: flex-end !important; gap: 8px !important; width: auto !important; min-width: max-content !important; margin: 0 !important; }
+        .holons-panel > .panel-heading > .panel-actions > button { display: inline-block !important; flex: 0 0 auto !important; white-space: nowrap !important; }
+        @media (max-width: 760px) {
+            .workspace-primary { grid-template-columns: 1fr; }
+            .holarchy-heading { align-items: stretch; }
+            .holarchy-filter { margin-left: 0; width: 100%; }
+            .holarchy-filter #graphRoot { width: 100%; min-width: 180px; }
+        }
+    </style>
 </head>
 <body>
     <div id="shell" class="eb-shell">
         <div id="header"></div>
         <div id="status"></div>
-
-        <div class="eb-navigation">
-            <nav class="eb-tree" aria-label="Holon tree">
-                <div class="tree-controls">
-                    <label>
-                        Root
-                        <select id="treeRoot"></select>
-                    </label>
-                    <label>
-                        Relationship
-                        <select id="treeRelationship"></select>
-                    </label>
+        <main class="eb-main">
+            <section id="app" class="card" hidden>
+                <div class="workspace-grid workspace-grids">
+                    <section class="panel holons-panel"><div class="panel-heading"><h3>Holons</h3><div class="panel-actions"><button id="newHolon" type="button">+ Holon</button><button id="newHolonType" type="button">+ Type</button></div></div><div id="grid" aria-label="Holons"></div></section>
                 </div>
-                <div id="treeGrid" aria-label="Holon tree"></div>
-            </nav>
-
-            <main class="eb-main">
-                <section id="app" class="card" hidden>
-                    <div class="workspace-grid">
-                        <section class="panel panel-graph">
-                            <div class="panel-heading">
-                                <h3>Holarchy</h3>
-                                <div class="panel-actions">
-                                    <label>
-                                        Depth
-                                        <select id="graphDepth" aria-label="Holarchy graph depth">
-                                            <option value="1">1</option>
-                                            <option value="2" selected>2</option>
-                                            <option value="3">3</option>
-                                            <option value="4">4</option>
-                                            <option value="all">∞</option>
-                                        </select>
-                                    </label>
-                                    <div class="muted">Click a Holon to center it</div>
+                <div class="workspace-grid workspace-primary">
+                    <section class="panel panel-graph">
+                        <div class="panel-heading holarchy-heading">
+                            <h3>Holarchy</h3>
+                            <div class="holarchy-filter" role="group" aria-label="Holarchy filters">
+                                <div class="holarchy-filter-field">
+                                    <span>Root</span>
+                                    <input id="graphRoot" type="text" autocomplete="off" aria-label="Holarchy graph root" placeholder="Choose a root Holon…">
+                                </div>
+                                <div class="holarchy-filter-field">
+                                    <span>Depth</span>
+                                    <select id="graphDepth" aria-label="Holarchy graph depth">
+                                        <option value="1">1</option>
+                                        <option value="2" selected>2</option>
+                                        <option value="3">3</option>
+                                        <option value="4">4</option>
+                                        <option value="all">∞</option>
+                                    </select>
+                                </div>
+                                <div class="holarchy-filter-prov">
+                                    <input id="graphProvenance" type="checkbox" aria-label="Show provenance">
+                                    <label for="graphProvenance">Prov</label>
                                 </div>
                             </div>
-                            <div id="holonGraph" aria-label="Holon relationship graph"></div>
-                        </section>
-                        <section class="panel">
-                            <div class="panel-heading">
-                                <h3>Holons</h3>
-                                <div class="panel-actions">
-                                    <button id="newHolon" type="button">+ Holon</button>
-                                    <button id="newHolonType" type="button">+ Type</button>
-                                </div>
-                            </div>
-                            <div id="grid" aria-label="Holons"></div>
-                        </section>
-
-                        <section class="panel">
-                            <h3 id="activeList">Relationships</h3>
-                            <div class="muted" id="listMode"></div>
-                            <div id="detailGrid" aria-label="Relationships"></div>
-                        </section>
-                    </div>
-                </section>
-            </main>
-        </div>
+                        </div>
+                        <div id="holonGraph" aria-label="Holon relationship graph"></div>
+                    </section>
+                    <aside id="holonInspector" class="panel holon-inspector" aria-label="Holon properties">
+                        <div class="panel-heading"><h3>Holon Properties</h3></div>
+                        <div id="holonInspectorContent" class="muted">Select a Holon to inspect its properties.</div>
+                    </aside>
+                </div>
+            </section>
+        </main>
     </div>
-
     <script src="./vendor/vanillagrid.js"></script>
     <script src="./vendor/hcg-autocomplete.js"></script>
     <script type="module">
         const header = document.getElementById('header');
         const response = await fetch(`./header.html?v=${Date.now()}`, { cache: 'no-store' });
-
-        if (!response.ok)
-        {
-            throw new Error(`Unable to load header: ${response.status}`);
-        }
-
+        if (!response.ok) throw new Error(`Unable to load header: ${response.status}`);
         header.outerHTML = await response.text();
-
         const logoMenu = document.querySelector('.eb-logo-menu');
-        document.addEventListener('click', event =>
-        {
-            if (!logoMenu?.open) return;
-            if (logoMenu.contains(event.target)) return;
-            logoMenu.removeAttribute('open');
-        });
-
-        await import('./eBStatus.js').then(({ eBStatus }) =>
-        {
-            eBStatus.init();
-            window.ebStatus = eBStatus;
-        });
-
-        await import('./CFstatus.js').then(({ CFstatus }) =>
-        {
-            window.ebCFStatus = CFstatus.init();
-        });
-
-        await import('./app.js');
+        document.addEventListener('click', event => { if (!logoMenu?.open) return; if (logoMenu.contains(event.target)) return; logoMenu.removeAttribute('open'); });
+        await import('./eBStatus.js').then(({ eBStatus }) => { eBStatus.init(); window.ebStatus = eBStatus; });
+        await import('./CFstatus.js').then(({ CFstatus }) => { window.ebCFStatus = CFstatus.init(); });
+        await import(`./app.js?v=${Date.now()}`);
     </script>
 </body>
 </html>
