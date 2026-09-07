@@ -5,9 +5,8 @@
 const SUPABASE_URL = 'https://zaabghrczrbqkxrhkinj.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_QL6Bz9m30CV8HFIdkLQ42Q_N9AFIOkF';
 
-export function createEBSupabase(backend)
+export function createEBSupabase()
 {
-  if (backend) return backend;
   if (!window.supabase) throw new Error('Supabase client library is not loaded');
   const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
   const result = (label, response) => { if (response.error) throw new Error(`${label}: ${response.error.message}`); return response.data; };
