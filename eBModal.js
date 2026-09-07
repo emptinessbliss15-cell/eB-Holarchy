@@ -40,6 +40,14 @@ export function showModal({ title, fields = [], submitLabel = 'Save', cancelLabe
       caption.textContent = field.label;
       label.appendChild(caption);
       let control;
+      if (field.preview)
+      {
+        const preview = document.createElement('img');
+        preview.className = 'eb-modal-image-preview';
+        preview.alt = field.previewAlt || `${field.label} preview`;
+        preview.src = field.preview;
+        label.appendChild(preview);
+      }
       if (field.type === 'select')
       {
         control = document.createElement('select');
