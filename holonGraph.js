@@ -309,6 +309,7 @@ function installContextMenu() {
       add('Inspect Holon', () => emitSelection(holon));
       add('Set as Graph Root', () => { currentRootId = String(holon.id); const control = document.getElementById('graphRoot'); if (control) control.value = holon.name || ''; render(); target.select(); emitSelection(holon); });
       add('Create Holon Here', () => window.dispatchEvent(new CustomEvent('holon:contextcreate', { detail: { parent: holon } })));
+      add('New Relationship', () => document.getElementById('newRelationship')?.click());
       separator();
       add('Edit Holon', () => window.dispatchEvent(new CustomEvent('holon:contextedit', { detail: { holon } })));
       add('Delete Holon', () => window.dispatchEvent(new CustomEvent('holon:contextdelete', { detail: { holon } })), true);
@@ -318,96 +319,104 @@ function installContextMenu() {
     } else {
       add('New Holon', () => window.dispatchEvent(new CustomEvent('holon:contextcreate')));
     }
+    menu.style.left = `${Math.min(x, window.innerWidth - 210)}px`;
+    menu.style.top = `${Math.min(y, window.innerHeight - 180)}px`;
     document.body.appendChild(menu);
     contextMenu = menu;
-    const rect = menu.getBoundingClientRect();
-    menu.style.left = `${Math.min(x, window.innerWidth - rect.width - 8)}px`;
-    menu.style.top = `${Math.min(y, window.innerHeight - rect.height - 8)}px`;
-    menu.querySelector('button')?.focus();
   }
-  const handler = event => { if (contextMenu && !contextMenu.contains(event.target)) closeContextMenu(); };
-  document.addEventListener('pointerdown', handler, true);
-  document.addEventListener('keydown', event => { if (event.key === 'Escape') closeContextMenu(); });
-  contextMenuCleanup = () => { document.removeEventListener('pointerdown', handler, true); closeContextMenu(); style.remove(); contextMenuCleanup = null; };
-  cy?.on('cxttap', event => showMenu(event.target === cy ? null : event.target, event.originalEvent?.clientX ?? event.renderedPosition.x, event.originalEvent?.clientY ?? event.renderedPosition.y));
+  const onContext = event => {
+    event.preventDefault();
+    const rendered = event.position || { x: 0, y: 0 };
+    const target = cy?.getElementById?.(event.target?.data?.('id')) || (event.target?.isNode?.() || event.target?.isEdge?.() ? event.target : null);
+    showMenu(target, event.originalEvent?.clientX ?? rendered.x, event.originalEvent?.clientY ?? rendered.y);
+  };
+  cy?.on('cxttap', onContext);
+  const onDocumentClick = event => { if (!contextMenu?.contains(event.target)) closeContextMenu(); };
+  document.addEventListener('click', onDocumentClick);
+  const onDocumentContext = event => { if (!container.contains(event.target)) closeContextMenu(); };
+  document.addEventListener('contextmenu', onDocumentContext);
+  contextMenuCleanup = () => {
+    cy?.off('cxttap', onContext);
+    document.removeEventListener('click', onDocumentClick);
+    document.removeEventListener('contextmenu', onDocumentContext);
+    closeContextMenu();
+  };
+}
+
+function installGraphInteractions() {
+  if (!cy) return;
+  cy.on('tap', 'node', event => {
+    const holon = currentModel.holons.find(item => String(item.id) === String(event.target.data('holonId')));
+    emitSelection(holon || null);
+  });
+  cy.on('tap', 'edge', event => {
+    const relationship = event.target.data('relationship');
+    if (relationship) window.dispatchEvent(new CustomEvent('relationship:selected', { detail: relationship }));
+  });
+  cy.on('mouseover', 'edge', event => { if (toggledOn('graph.hoverInfo')) event.target.style('overlay-opacity', 0.08); });
+  cy.on('mouseout', 'edge', event => { event.target.style('overlay-opacity', 0); });
 }
 
 function render() {
   if (!cy) return;
-  syncFeatureToggles();
   const model = visibleModel();
-  const elements = buildElements(model.holons, model.relationships, model.relationshipTypes);
-  cy.batch(() => {
-    cy.elements().remove();
-    if (elements.length) cy.add(elements);
-  });
-  if (model.holons.length) {
-    cy.layout({ name: 'cose', animate: false, fit: true, padding: 40 }).run();
-    cy.fit(cy.nodes(), 40);
-  }
+  cy.elements().remove();
+  cy.add(buildElements(model.holons, model.relationships, model.relationshipTypes));
+  cy.layout({ name: 'cose', animate: false }).run();
+  syncFeatureToggles();
   updateNavigationButton();
 }
 
-function installDepthControl() {
-  if (depthListenerInstalled) return;
-  const control = document.getElementById('graphDepth');
-  if (!control) return;
-  const persisted = readPersistedDepth();
-  currentDepth = persisted || control.value || 2;
-  control.value = String(currentDepth);
-  control.addEventListener('change', () => { currentDepth = control.value || 2; persistDepth(currentDepth); render(); });
-  persistDepth(currentDepth);
-  depthListenerInstalled = true;
-}
-
-function installProvenanceControl() {
-  if (provenanceListenerInstalled) return;
-  const control = document.getElementById('graphProvenance');
-  if (!control) return;
-  showProvenance = control.checked;
-  control.addEventListener('change', () => { showProvenance = control.checked; render(); });
-  provenanceListenerInstalled = true;
-}
-
-export function createHolonGraph({ element, holons, relationships, relationshipTypes = [], rootId = null, onSelect = null }) {
+export function createHolonGraph({ element, holons = [], relationships = [], relationshipTypes = [], onSelect } = {}) {
+  installStyles();
+  installStatusLegend();
+  installFeatureToggleListener();
   if (!element) return null;
-  if (!window.cytoscape) throw new Error('Cytoscape is not loaded');
-  installStyles(); installStatusLegend(); installDepthControl(); installProvenanceControl(); installNavigation(); installFeatureToggleListener(); cy?.destroy(); closeContextMenu(); selectionHandler = onSelect;
+  if (!cy) {
+    cy = window.cytoscape({ container: element, elements: [], style: [
+      { selector: 'node', style: { 'label': 'data(label)', 'text-valign': 'center', 'text-halign': 'center', 'background-color': '#5b8def', 'color': '#fff', 'font-size': 11, 'width': 42, 'height': 42, 'text-wrap': 'wrap', 'text-max-width': 70 } },
+      { selector: 'edge', style: { 'curve-style': 'bezier', 'target-arrow-shape': 'triangle', 'line-color': '#999', 'target-arrow-color': '#999', 'width': 2, 'label': 'data(label)', 'font-size': 9, 'text-background-color': '#fff', 'text-background-opacity': 0.7, 'text-background-padding': 2 } },
+      { selector: ':selected', style: { 'overlay-color': '#f59e0b', 'overlay-opacity': 0.18, 'overlay-padding': 5 } },
+    ] });
+    installHoverPreview();
+    installNavigation();
+    installGraphInteractions();
+    installContextMenu();
+  }
   currentModel = { holons, relationships, relationshipTypes };
-  currentRootId = rootId || null;
-  const dark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
-  const surface = dark ? '#242424' : '#fff'; const text = dark ? '#eeeeee' : '#222'; const edge = dark ? '#aaaaaa' : '#777';
-  const model = visibleModel();
-  cy = window.cytoscape({ container: element, elements: buildElements(model.holons, model.relationships, model.relationshipTypes), layout: { name: 'cose', animate: false, fit: true, padding: 40 }, minZoom: 0.2, maxZoom: 3, wheelSensitivity: 0.25, style: [
-    { selector: 'node', style: { label: 'data(label)', 'text-valign': 'center', 'text-halign': 'center', 'background-color': '#5b8def', color: '#fff', 'font-size': 13, 'font-weight': 600, 'text-wrap': 'wrap', 'text-max-width': 110, width: 'label', height: 'label', padding: '14px', shape: 'roundrectangle', 'border-width': 2, 'border-color': '#3769c5' } },
-    { selector: 'node[status = "proposed"]', style: { 'background-color': '#facc15', 'border-color': '#a16207', color: '#222' } },
-    { selector: 'node[status = "approved"]', style: { 'background-color': '#22c55e', 'border-color': '#15803d' } },
-    { selector: 'node[status = "denied"]', style: { 'background-color': '#ef4444', 'border-color': '#b91c1c' } },
-    { selector: 'node:selected', style: { 'border-color': '#f59e0b', 'border-width': 4 } },
-    { selector: 'edge', style: { 'curve-style': 'bezier', width: 2, 'line-color': edge, 'target-arrow-color': edge, 'target-arrow-shape': 'triangle', label: 'data(label)', color: text, 'font-size': 11, 'text-background-color': surface, 'text-background-opacity': 0.9, 'text-background-padding': 2 } },
-    { selector: 'edge:selected', style: { 'line-color': '#f59e0b', 'target-arrow-color': '#f59e0b', width: 3 } },
-  ] });
-  cy.on('tap', 'node', event => { const id = String(event.target.data('holonId')); emitSelection(currentModel.holons.find(item => String(item.id) === id) || null); });
-  cy.on('dbltap', 'node', event => { const id = String(event.target.data('holonId')); if (!currentModel.holons.some(item => String(item.id) === id)) return; currentRootId = id; const control = document.getElementById('graphRoot'); if (control) control.value = currentModel.holons.find(item => String(item.id) === id)?.name || ''; render(); const node = cy.nodes(`[id = "${id.replaceAll('"', '\\"')}"]`); node.select(); emitSelection(currentModel.holons.find(item => String(item.id) === id) || null); });
-  cy.on('click', 'node', event => { const id = String(event.target.data('holonId')); emitSelection(currentModel.holons.find(item => String(item.id) === id) || null); });
-  cy.on('tap', event => { if (event.target === cy) emitSelection(null); });
-  installHoverPreview();
-  installContextMenu();
-  updateNavigationButton();
-  syncFeatureToggles();
+  selectionHandler = onSelect || selectionHandler;
+  render();
   return cy;
 }
 
-export function setGraphRoot(rootId) {
-  const normalized = rootId == null ? null : String(rootId).trim();
-  currentRootId = normalized && currentModel.holons.some(holon => String(holon.id) === normalized) ? normalized : null;
+export function updateHolonGraph({ holons = [], relationships = [], relationshipTypes = [] } = {}) {
+  currentModel = { holons, relationships, relationshipTypes };
   render();
 }
 
-export function getGraphRoot() { return currentRootId; }
-export function getGraphParent() { return graphParentId(); }
-export function setGraphDepth(depth) { currentDepth = depth || 'all'; persistDepth(currentDepth); const control = document.getElementById('graphDepth'); if (control) control.value = String(currentDepth); render(); }
-export function setGraphProvenance(enabled) { showProvenance = Boolean(enabled); const control = document.getElementById('graphProvenance'); if (control) control.checked = showProvenance; render(); }
-export function updateHolonGraph(model) { if (!cy) return; currentModel = model || { holons: [], relationships: [], relationshipTypes: [] }; if (currentRootId && !currentModel.holons.some(h => String(h.id) === String(currentRootId))) currentRootId = null; render(); }
-export function destroyHolonGraph() { contextMenuCleanup?.(); hideHoverPreview(); cy?.destroy(); cy = null; currentRootId = null; selectionHandler = null; currentModel = { holons: [], relationships: [], relationshipTypes: [] }; }
+export function destroyHolonGraph() {
+  contextMenuCleanup?.();
+  contextMenuCleanup = null;
+  hideHoverPreview();
+  if (cy) cy.destroy();
+  cy = null;
+}
+
+export function setGraphRoot(rootId) {
+  currentRootId = rootId ? String(rootId) : null;
+  persistDepth(currentDepth);
+  render();
+}
+
+export function setGraphDepth(depth) {
+  currentDepth = depth === 'all' ? 'all' : Number(depth) || 2;
+  persistDepth(currentDepth);
+  render();
+}
+
+export function setShowProvenance(value) {
+  showProvenance = Boolean(value);
+  render();
+}
+
 export function getHolonGraph() { return cy; }
