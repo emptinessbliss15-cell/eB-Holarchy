@@ -349,6 +349,18 @@ function installGraphInteractions() {
     const holon = currentModel.holons.find(item => String(item.id) === String(event.target.data('holonId')));
     emitSelection(holon || null);
   });
+  cy.on('dbltap', 'node', event => {
+    const holon = currentModel.holons.find(item => String(item.id) === String(event.target.data('holonId')));
+    if (!holon) return;
+    currentRootId = String(holon.id);
+    const control = document.getElementById('graphRoot');
+    if (control) control.value = holon.name || '';
+    render();
+    const node = cy?.nodes?.(`[id = "${currentRootId.replaceAll('"', '\\"')}"]`);
+    node?.select();
+    emitSelection(holon);
+    updateNavigationButton();
+  });
   cy.on('tap', 'edge', event => {
     const relationship = event.target.data('relationship');
     if (relationship) window.dispatchEvent(new CustomEvent('relationship:selected', { detail: relationship }));
