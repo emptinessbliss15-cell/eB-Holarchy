@@ -1,12 +1,20 @@
 import { toggledOn } from './eBToggles.js';
 
 // Experimental fCoSE adapter.
-// Keeps the existing Holon graph code unchanged while allowing the graph.fCoSE
-// feature toggle to substitute fCoSE anywhere the graph requests the built-in
-// CoSE layout. This is intentionally isolated so the experiment can be removed
-// cleanly once we decide how Holons, Circles, and Roles should be modeled.
-
+// Register the browser build, then keep the existing Holon graph code unchanged
+// while allowing the graph.fCoSE feature toggle to substitute fCoSE for CoSE.
 let patched = false;
+
+function registerFcose() {
+  if (typeof window.cytoscapeFcose !== 'function' || typeof window.cytoscape !== 'function') return false;
+  try {
+    window.cytoscapeFcose(window.cytoscape);
+    return true;
+  } catch (error) {
+    console.warn('eB-Holarchy: fCoSE registration failed', error);
+    return false;
+  }
+}
 
 function layoutOptions(options) {
   if (!options || typeof options !== 'object') return options;
@@ -24,8 +32,8 @@ function layoutOptions(options) {
 
 export function installFcoseAdapter() {
   if (patched || !window.cytoscape) return;
+  registerFcose();
   const original = window.cytoscape;
-
   const wrapped = function (...args) {
     if (args[0] && typeof args[0] === 'object') {
       const options = { ...args[0] };
@@ -43,24 +51,10 @@ export function installFcoseAdapter() {
     }
     return instance;
   };
-
   Object.assign(wrapped, original);
   wrapped.__ebFcosePatched = true;
   window.cytoscape = wrapped;
   patched = true;
 }
 
-export function applyFcoseLayout() {
-  if (!toggledOn('graph.fCoSE')) return;
-  const graph = window.__ebHolonGraph || null;
-  if (graph?.layout) graph.layout({ name: 'fcose', quality: 'default', animate: false, fit: true, padding: 40 }).run();
-}
-
 installFcoseAdapter();
-window.addEventListener('feature:toggle', event => {
-  if (event.detail?.name !== 'graph.fCoSE') return;
-  const graph = window.__ebHolonGraph || null;
-  if (!graph?.layout) return;
-  const name = event.detail.enabled ? 'fcose' : 'cose';
-  graph.layout({ name, quality: 'default', animate: false, fit: true, padding: 40 }).run();
-});
