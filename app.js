@@ -67,17 +67,75 @@ function dynamicFieldDefinitions(typeName) {
   const fieldIds = new Set(relationships.filter(r => String(r.target_holon_id) === String(typeHolon.id) && relationshipTypes.find(t => String(t.id) === String(r.relationship_type_id))?.name?.toLowerCase() === 'field of').map(r => String(r.source_holon_id)));
   return holons.filter(h => fieldIds.has(String(h.id)) && fieldTypeIds.has(String(h.holon_type_id))).map(field => {
     const meta = parseFieldDefinition(field.Content);
-    return { id: field.id, name: field.name || '(unnamed field)', dataType: meta.dataType || 'text', required: meta.required === true, defaultValue: meta.defaultValue ?? '', order: Number(meta.order ?? 0) };
+    return { id: field.id, name: field.name || '(unnamed field)', dataType: String(meta.dataType || 'text').toLowerCase(), required: meta.required === true, defaultValue: meta.defaultValue ?? '', order: Number(meta.order ?? 0) };
   }).sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
 }
 
+function normalizeDynamicValue(field, value) {
+  const dataType = String(field.dataType || 'text').toLowerCase();
+  if (dataType === 'boolean') {
+    if (typeof value === 'boolean') return value;
+    const text = String(value ?? '').trim().toLowerCase();
+    if (text === '' && !field.required) return false;
+    if (text === 'true' || text === '1' || text === 'yes' || text === 'on') return true;
+    if (text === 'false' || text === '0' || text === 'no' || text === 'off') return false;
+    throw new Error(`${field.name} must be true or false`);
+  }
+  if (dataType === 'integer') {
+    if (value === '' || value === null || value === undefined) { if (field.required) throw new Error(`${field.name} is required`); return null; }
+    const number = Number(value);
+    if (!Number.isInteger(number)) throw new Error(`${field.name} must be a whole number`);
+    return number;
+  }
+  if (dataType === 'number' || dataType === 'float' || dataType === 'double') {
+    if (value === '' || value === null || value === undefined) { if (field.required) throw new Error(`${field.name} is required`); return null; }
+    const number = Number(value);
+    if (!Number.isFinite(number)) throw new Error(`${field.name} must be a number`);
+    return number;
+  }
+  if (dataType === 'json' || dataType === 'array') {
+    if (value === '' || value === null || value === undefined) { if (field.required) throw new Error(`${field.name} is required`); return null; }
+    let parsed;
+    try { parsed = typeof value === 'string' ? JSON.parse(value) : value; }
+    catch { throw new Error(`${field.name} must contain valid JSON`); }
+    if (dataType === 'array' && !Array.isArray(parsed)) throw new Error(`${field.name} must contain a JSON array`);
+    return parsed;
+  }
+  if (dataType === 'date' || dataType === 'datetime' || dataType === 'time' || dataType === 'uuid' || dataType === 'reference') {
+    const text = String(value ?? '').trim();
+    if (!text && field.required) throw new Error(`${field.name} is required`);
+    if (dataType === 'uuid' && text && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text)) throw new Error(`${field.name} must be a valid UUID`);
+    return text;
+  }
+  const text = String(value ?? '');
+  if (!text.trim() && field.required) throw new Error(`${field.name} is required`);
+  return text;
+}
+
+function dynamicFieldEditor(field, currentValue) {
+  const dataType = String(field.dataType || 'text').toLowerCase();
+  if (dataType === 'reference') return { type: 'combobox', options: holonOptions(true, currentValue), value: currentValue ?? '', minChars: 0, allowCustom: false, clearable: true };
+  if (dataType === 'text') return { type: 'textarea', rows: 6 };
+  if (dataType === 'json' || dataType === 'array') return { type: 'textarea', rows: 8 };
+  if (dataType === 'boolean') return { type: 'checkbox' };
+  if (dataType === 'integer') return { type: 'input', inputType: 'number', step: 1 };
+  if (dataType === 'number' || dataType === 'float' || dataType === 'double') return { type: 'input', inputType: 'number', step: 'any' };
+  if (dataType === 'date') return { type: 'input', inputType: 'date' };
+  if (dataType === 'datetime') return { type: 'input', inputType: 'datetime-local' };
+  if (dataType === 'time') return { type: 'input', inputType: 'time' };
+  return { type: 'text' };
+}
+
 async function saveDynamicField(holon, field, value) {
+  let normalized;
+  try { normalized = normalizeDynamicValue(field, value); }
+  catch (error) { setStatus(error.message || `Invalid ${field.name}`, 'warn'); renderHolonInspector(holon); return; }
   const decoded = decodeDynamicContent(holon.Content);
-  const nextFields = { ...decoded.fields, [String(field.id)]: value };
+  const nextFields = { ...decoded.fields, [String(field.id)]: normalized };
   const nextContent = encodeDynamicContent(nextFields, decoded.legacyContent);
   if (nextContent === String(holon.Content ?? '')) return;
   setStatus(`Updating ${field.name}…`);
-  try { await eBliss.holons.update(holon.id, { Content: nextContent }); await loadModel(); const updated = holons.find(item => String(item.id) === String(holon.id)) || { ...holon, Content: nextContent }; selectedHolon = updated; renderHolonInspector(updated); status.updated(field.name, value === '' ? '—' : String(value)); }
+  try { await eBliss.holons.update(holon.id, { Content: nextContent }); await loadModel(); const updated = holons.find(item => String(item.id) === String(holon.id)) || { ...holon, Content: nextContent }; selectedHolon = updated; renderHolonInspector(updated); status.updated(field.name, normalized === '' || normalized === null ? '—' : formatPropertyValue(normalized)); }
   catch (error) { setStatus(error.message || `Unable to update ${field.name}`, 'error'); renderHolonInspector(holon); }
 }
 
@@ -123,7 +181,16 @@ function renderHolonInspector(holon) {
   dynamicFields.forEach(field => rows.push({ key: `field:${field.id}`, property: field.name, value: formatPropertyValue(decoded.fields[String(field.id)] ?? field.defaultValue) }));
   rows.push({ key: 'Content', property: 'Content', value: decoded.legacyContent || '—' });
   const gridElement = document.createElement('div'); gridElement.className = 'holon-property-grid'; gridElement.setAttribute('aria-label', `${holon.name || 'Holon'} properties`); elements.inspectorContent.appendChild(gridElement);
-  propertyGrid = createEBGrid(gridElement, { data: rows, columns: [{ key: 'property', label: 'Property', sortable: true }, { key: 'value', label: 'Value', sortable: true, editor: row => row.key === 'holon_type' ? { type: 'combobox', options: holonTypeOptions(holon.holon_type), value: holon.holon_type, minChars: 0, allowCustom: false } : row.key === 'Content' || row.key.startsWith('field:') ? { type: 'textarea', rows: 6 } : row.key === 'id' || row.key === 'created_at' ? null : { type: 'text' } }], pageSize: Math.max(rows.length, 10), pagination: false, filterable: false, sortable: true, resizableColumns: true, editableRows: true, keyboardNavigation: true, contextMenu: false, onRowEdit: (row, field, newValue) => { if (field !== 'value') return; const key = row.key; const rawValue = String(newValue ?? ''); const originalValue = key.startsWith('field:') ? formatPropertyValue(decoded.fields[key.slice('field:'.length)] ?? dynamicFields.find(item => String(item.id) === key.slice('field:'.length))?.defaultValue) : propertyValueForDisplay(key, key === 'Content' ? decoded.legacyContent : holon[key]); if (rawValue === originalValue) return; void saveInspectorProperty(holon, key, rawValue); } });
+  propertyGrid = createEBGrid(gridElement, { data: rows, columns: [{ key: 'property', label: 'Property', sortable: true }, { key: 'value', label: 'Value', sortable: true, editor: row => {
+    if (row.key === 'holon_type') return { type: 'combobox', options: holonTypeOptions(holon.holon_type), value: holon.holon_type, minChars: 0, allowCustom: false };
+    if (row.key.startsWith('field:')) {
+      const field = dynamicFields.find(item => String(item.id) === row.key.slice('field:'.length));
+      if (field) return dynamicFieldEditor(field, decoded.fields[String(field.id)] ?? field.defaultValue);
+    }
+    if (row.key === 'Content') return { type: 'textarea', rows: 6 };
+    if (row.key === 'id' || row.key === 'created_at') return null;
+    return { type: 'text' };
+  } }], pageSize: Math.max(rows.length, 10), pagination: false, filterable: false, sortable: true, resizableColumns: true, editableRows: true, keyboardNavigation: true, contextMenu: false, onRowEdit: (row, field, newValue) => { if (field !== 'value') return; const key = row.key; if (key.startsWith('field:')) { void saveInspectorProperty(holon, key, newValue); return; } const rawValue = String(newValue ?? ''); const originalValue = propertyValueForDisplay(key, key === 'Content' ? decoded.legacyContent : holon[key]); if (rawValue === originalValue) return; void saveInspectorProperty(holon, key, rawValue); } });
 }
 
 function selectHolonInInspector(holon) { if (!holon) return; renderHolonInspector(holon); const node = graph?.nodes?.(`[id = "${String(holon.id).replaceAll('"', '\\"')}"]`); node?.select(); if (node?.nonempty?.()) graph.center(node); }
