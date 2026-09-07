@@ -5,8 +5,9 @@
 const SUPABASE_URL = 'https://zaabghrczrbqkxrhkinj.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_QL6Bz9m30CV8HFIdkLQ42Q_N9AFIOkF';
 
-export function createEBSupabase()
+export function createEBSupabase(backend)
 {
+  if (backend) return backend;
   if (!window.supabase) throw new Error('Supabase client library is not loaded');
   const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
   const result = (label, response) => { if (response.error) throw new Error(`${label}: ${response.error.message}`); return response.data; };
@@ -93,6 +94,15 @@ export function createEBSupabase()
         if (!name) throw new Error('Holon type name is required');
         const description = String(values?.description ?? '').trim();
         return result('Holon type', await supabase.from('holon_types').insert({ name, description }).select().single());
+      },
+    },
+    relationshipTypes: {
+      async create(values)
+      {
+        const name = String(values?.name ?? '').trim();
+        if (!name) throw new Error('Relationship type name is required');
+        const description = String(values?.description ?? '').trim();
+        return result('Relationship type', await supabase.from('relationship_types').insert({ name, description }).select().single());
       },
     },
     relationships: {
