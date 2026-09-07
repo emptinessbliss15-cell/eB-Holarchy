@@ -12,6 +12,8 @@ import { showModal } from './eBModal.js';
 
 const status = eBStatus;
 const GRAPH_ROOT_STORAGE_KEY = 'eB-Holarchy.graphRoot';
+const DYNAMIC_FIELDS_KEY = '_eBFields';
+const LEGACY_CONTENT_KEY = '_legacyContent';
 const elements = {
   app: document.getElementById('app'), auth: document.getElementById('auth'), graph: document.getElementById('holonGraph'), graphRoot: document.getElementById('graphRoot'), graphDepth: document.getElementById('graphDepth'),
   inspector: document.getElementById('holonInspector'), inspectorContent: document.getElementById('holonInspectorContent'),
@@ -31,7 +33,66 @@ function isEditableHolonProperty(key) { return key !== 'id' && key !== 'created_
 function getStoredGraphRoot() { try { return localStorage.getItem(GRAPH_ROOT_STORAGE_KEY); } catch { return null; } }
 function storeGraphRoot(rootId) { try { if (rootId) localStorage.setItem(GRAPH_ROOT_STORAGE_KEY, String(rootId)); else localStorage.removeItem(GRAPH_ROOT_STORAGE_KEY); } catch { /* Storage may be unavailable; graph still works for this session. */ } }
 
+function decodeDynamicContent(raw) {
+  if (raw === null || raw === undefined || raw === '') return { fields: {}, legacyContent: '' };
+  try {
+    const parsed = JSON.parse(String(raw));
+    if (parsed && typeof parsed === 'object' && parsed[DYNAMIC_FIELDS_KEY] && typeof parsed[DYNAMIC_FIELDS_KEY] === 'object') {
+      return { fields: { ...parsed[DYNAMIC_FIELDS_KEY] }, legacyContent: String(parsed[LEGACY_CONTENT_KEY] ?? '') };
+    }
+  } catch { /* Legacy plain-text Content. */ }
+  return { fields: {}, legacyContent: String(raw) };
+}
+
+function encodeDynamicContent(fields, legacyContent = '') {
+  const cleanFields = Object.fromEntries(Object.entries(fields || {}).filter(([, value]) => value !== undefined));
+  if (!Object.keys(cleanFields).length) return String(legacyContent ?? '');
+  const envelope = { [DYNAMIC_FIELDS_KEY]: cleanFields };
+  if (legacyContent !== null && legacyContent !== undefined && legacyContent !== '') envelope[LEGACY_CONTENT_KEY] = String(legacyContent);
+  return JSON.stringify(envelope);
+}
+
+function dynamicFieldDefinitions(typeName) {
+  const typeHolon = holons.find(h => h.holon_type === 'Holon Type' && String(h.name).trim().toLowerCase() === String(typeName || '').trim().toLowerCase());
+  if (!typeHolon) return [];
+  const fieldTypeIds = new Set(holonTypes.filter(t => t.name === 'Holon Field').map(t => String(t.id)));
+  const fieldIds = new Set(relationships.filter(r => String(r.target_holon_id) === String(typeHolon.id) && relationshipTypes.find(t => String(t.id) === String(r.relationship_type_id))?.name?.toLowerCase() === 'field of').map(r => String(r.source_holon_id)));
+  return holons.filter(h => fieldIds.has(String(h.id)) && fieldTypeIds.has(String(h.holon_type_id))).map(field => {
+    const meta = decodeDynamicContent(field.Content);
+    return { id: field.id, name: field.name || '(unnamed field)', dataType: meta.fields.dataType || 'text', required: meta.fields.required === true, defaultValue: meta.fields.defaultValue ?? '', order: Number(meta.fields.order ?? 0) };
+  }).sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
+}
+
+async function saveDynamicField(holon, field, value) {
+  const decoded = decodeDynamicContent(holon.Content);
+  const nextFields = { ...decoded.fields, [String(field.id)]: value };
+  const nextContent = encodeDynamicContent(nextFields, decoded.legacyContent);
+  if (nextContent === String(holon.Content ?? '')) return;
+  setStatus(`Updating ${field.name}…`);
+  try { await eBliss.holons.update(holon.id, { Content: nextContent }); await loadModel(); const updated = holons.find(item => String(item.id) === String(holon.id)) || { ...holon, Content: nextContent }; selectedHolon = updated; renderHolonInspector(updated); status.updated(field.name, value === '' ? '—' : String(value)); }
+  catch (error) { setStatus(error.message || `Unable to update ${field.name}`, 'error'); renderHolonInspector(holon); }
+}
+
+async function initializeDynamicFields(holon) {
+  const fields = dynamicFieldDefinitions(holon.holon_type);
+  if (!fields.length) return holon;
+  const decoded = decodeDynamicContent(holon.Content);
+  const nextFields = { ...decoded.fields };
+  let changed = false;
+  fields.forEach(field => { const key = String(field.id); if (!(key in nextFields)) { nextFields[key] = field.defaultValue; changed = true; } });
+  if (!changed) return holon;
+  const nextContent = encodeDynamicContent(nextFields, decoded.legacyContent);
+  return eBliss.holons.update(holon.id, { Content: nextContent });
+}
+
 async function saveInspectorProperty(holon, key, value) {
+  if (key.startsWith('field:')) {
+    const fieldId = key.slice('field:'.length);
+    const field = dynamicFieldDefinitions(holon.holon_type).find(item => String(item.id) === fieldId);
+    if (!field) { setStatus('Dynamic field definition is no longer available', 'error'); return; }
+    await saveDynamicField(holon, field, value);
+    return;
+  }
   if (!isEditableHolonProperty(key)) { setStatus(`${labelForKey(key)} is read-only`, 'warn'); renderHolonInspector(holon); return; }
   const nextValue = key === 'Content' ? String(value ?? '') : String(value ?? '').trim();
   if (key === 'name' && !nextValue) { setStatus('Name cannot be empty', 'warn'); renderHolonInspector(holon); return; }
@@ -48,9 +109,13 @@ function renderHolonInspector(holon) {
   selectedHolon = holon;
   const title = document.createElement('div'); title.className = 'holon-inspector-title'; title.textContent = holon.name || '(unnamed Holon)'; elements.inspectorContent.appendChild(title);
   const actions = document.createElement('div'); actions.className = 'holon-inspector-actions'; const editButton = document.createElement('button'); editButton.type = 'button'; editButton.textContent = 'Edit Holon'; editButton.addEventListener('click', () => editHolon(holon)); actions.appendChild(editButton); elements.inspectorContent.appendChild(actions);
+  const dynamicFields = dynamicFieldDefinitions(holon.holon_type);
+  const decoded = decodeDynamicContent(holon.Content);
+  const rows = Object.entries(holon).filter(([key]) => key !== 'children' && key !== 'Content').map(([key, value]) => ({ key, property: labelForKey(key), value: propertyValueForDisplay(key, value) }));
+  dynamicFields.forEach(field => rows.push({ key: `field:${field.id}`, property: field.name, value: formatPropertyValue(decoded.fields[String(field.id)] ?? field.defaultValue) }));
+  rows.push({ key: 'Content', property: 'Content', value: decoded.legacyContent || '—' });
   const gridElement = document.createElement('div'); gridElement.className = 'holon-property-grid'; gridElement.setAttribute('aria-label', `${holon.name || 'Holon'} properties`); elements.inspectorContent.appendChild(gridElement);
-  const rows = Object.entries(holon).filter(([key]) => key !== 'children').map(([key, value]) => ({ key, property: labelForKey(key), value: propertyValueForDisplay(key, value) }));
-  propertyGrid = createEBGrid(gridElement, { data: rows, columns: [{ key: 'property', label: 'Property', sortable: true }, { key: 'value', label: 'Value', sortable: true, editor: row => row.key === 'holon_type' ? { type: 'combobox', options: holonTypeOptions(holon.holon_type), value: holon.holon_type, minChars: 0, allowCustom: false } : row.key === 'Content' ? { type: 'textarea', rows: 8 } : row.key === 'id' || row.key === 'created_at' ? null : { type: 'text' } }], pageSize: Math.max(rows.length, 10), pagination: false, filterable: false, sortable: true, resizableColumns: true, editableRows: true, keyboardNavigation: true, contextMenu: false, onRowEdit: (row, field, newValue) => { if (field !== 'value') return; const key = row.key; const rawValue = String(newValue ?? ''); const originalValue = propertyValueForDisplay(key, holon[key]); if (rawValue === originalValue) return; void saveInspectorProperty(holon, key, rawValue); } });
+  propertyGrid = createEBGrid(gridElement, { data: rows, columns: [{ key: 'property', label: 'Property', sortable: true }, { key: 'value', label: 'Value', sortable: true, editor: row => row.key === 'holon_type' ? { type: 'combobox', options: holonTypeOptions(holon.holon_type), value: holon.holon_type, minChars: 0, allowCustom: false } : row.key === 'Content' || row.key.startsWith('field:') ? { type: 'textarea', rows: 6 } : row.key === 'id' || row.key === 'created_at' ? null : { type: 'text' } }], pageSize: Math.max(rows.length, 10), pagination: false, filterable: false, sortable: true, resizableColumns: true, editableRows: true, keyboardNavigation: true, contextMenu: false, onRowEdit: (row, field, newValue) => { if (field !== 'value') return; const key = row.key; const rawValue = String(newValue ?? ''); const originalValue = key.startsWith('field:') ? formatPropertyValue(decoded.fields[key.slice('field:'.length)] ?? dynamicFields.find(item => String(item.id) === key.slice('field:'.length))?.defaultValue) : propertyValueForDisplay(key, key === 'Content' ? decoded.legacyContent : holon[key]); if (rawValue === originalValue) return; void saveInspectorProperty(holon, key, rawValue); } });
 }
 
 function selectHolonInInspector(holon) { if (!holon) return; renderHolonInspector(holon); const node = graph?.nodes?.(`[id = "${String(holon.id).replaceAll('"', '\\"')}"]`); node?.select(); if (node?.nonempty?.()) graph.center(node); }
@@ -76,7 +141,7 @@ async function deleteRelationship(relationship) {
 async function deleteHolon(holon) { const name = holon.name || '(unnamed)'; if (!confirm(`Delete “${name}”?`)) return; setStatus(`Deleting ${name}…`); try { await eBliss.holons.delete(holon.id); await loadModel(); setStatus(`Deleted ${name}`, 'success'); } catch (error) { setStatus(error.message || 'Unable to delete Holon', 'error'); } }
 async function createHolonType() { const values = await showModal({ title: 'New Holon Type', submitLabel: 'Create Type', fields: [{ name: 'name', label: 'Name', required: true, placeholder: 'e.g. Service' }, { name: 'description', label: 'Description', placeholder: 'What kind of Holon is this?' }] }); if (!values?.name?.trim()) return; const name = values.name.trim(), description = values.description?.trim() || ''; setStatus(`Creating Holon type ${name}…`); try { await eBliss.holonTypes.create({ name, description }); await loadModel(); setStatus(`Created Holon type ${name}`, 'success'); } catch (error) { setStatus(error.message || 'Unable to create Holon type', 'error'); } }
 async function createRelationshipType() { const values = await showModal({ title: 'New Relationship Type', submitLabel: 'Create Relationship Type', fields: [{ name: 'name', label: 'Name', required: true, placeholder: 'e.g. Field Of' }, { name: 'description', label: 'Description', placeholder: 'What does this relationship mean?' }] }); if (!values?.name?.trim()) return; const name = values.name.trim(), description = values.description?.trim() || ''; setStatus(`Creating relationship type ${name}…`); try { await eBliss.relationshipTypes.create({ name, description }); await loadModel(); setStatus(`Created relationship type ${name}`, 'success'); } catch (error) { setStatus(error.message || 'Unable to create relationship type', 'error'); } }
-async function createHolon(prefillName = '', prefillType = '', parentHolon = null) { const type = prefillType || defaultHolonType(); if (!type) { setStatus('No Holon types are available', 'error'); return null; } const values = await showModal({ title: 'New Holon', submitLabel: 'Create Holon', fields: [{ name: 'name', label: 'Name', required: true, placeholder: 'Holon name', value: prefillName }, { name: 'holon_type', label: 'Type', type: 'combobox', options: holonTypeOptions(type), value: type, required: true, minChars: 0, allowCustom: false, placeholder: 'Find a Holon type…' }, { name: 'relationship_type_id', label: 'Initial Relationship', type: 'select', options: relationshipTypeOptions(true), value: '' }, { name: 'parent_holon_id', label: 'Parent Holon', type: 'select', options: holonOptions(true, parentHolon?.id || ''), value: parentHolon?.id || '' }, { name: 'position', label: 'Position', type: 'number', value: '0' }] }); if (!values?.name?.trim()) return null; if ((values.relationship_type_id && !values.parent_holon_id) || (!values.relationship_type_id && values.parent_holon_id)) { setStatus('Choose both an initial relationship and a parent Holon, or leave both empty', 'warn'); return null; } const name = values.name.trim(); setStatus(`Creating ${name}…`); try { const holon = await eBliss.holons.create({ name, holon_type: values.holon_type }); if (values.relationship_type_id && values.parent_holon_id) await eBliss.relationships.create({ source_holon_id: holon.id, target_holon_id: values.parent_holon_id, relationship_type_id: values.relationship_type_id, position: Number(values.position) || 0 }); await loadModel(); openHolon(holon); setStatus(`Created ${name}`, 'success'); return holon; } catch (error) { setStatus(error.message || 'Unable to create Holon', 'error'); return null; } }
+async function createHolon(prefillName = '', prefillType = '', parentHolon = null) { const type = prefillType || defaultHolonType(); if (!type) { setStatus('No Holon types are available', 'error'); return null; } const values = await showModal({ title: 'New Holon', submitLabel: 'Create Holon', fields: [{ name: 'name', label: 'Name', required: true, placeholder: 'Holon name', value: prefillName }, { name: 'holon_type', label: 'Type', type: 'combobox', options: holonTypeOptions(type), value: type, required: true, minChars: 0, allowCustom: false, placeholder: 'Find a Holon type…' }, { name: 'relationship_type_id', label: 'Initial Relationship', type: 'select', options: relationshipTypeOptions(true), value: '' }, { name: 'parent_holon_id', label: 'Parent Holon', type: 'select', options: holonOptions(true, parentHolon?.id || ''), value: parentHolon?.id || '' }, { name: 'position', label: 'Position', type: 'number', value: '0' }] }); if (!values?.name?.trim()) return null; if ((values.relationship_type_id && !values.parent_holon_id) || (!values.relationship_type_id && values.parent_holon_id)) { setStatus('Choose both an initial relationship and a parent Holon, or leave both empty', 'warn'); return null; } const name = values.name.trim(); setStatus(`Creating ${name}…`); try { let holon = await eBliss.holons.create({ name, holon_type: values.holon_type }); holon = await initializeDynamicFields(holon) || holon; if (values.relationship_type_id && values.parent_holon_id) await eBliss.relationships.create({ source_holon_id: holon.id, target_holon_id: values.parent_holon_id, relationship_type_id: values.relationship_type_id, position: Number(values.position) || 0 }); await loadModel(); holon = holons.find(item => String(item.id) === String(holon.id)) || holon; openHolon(holon); setStatus(`Created ${name}`, 'success'); return holon; } catch (error) { setStatus(error.message || 'Unable to create Holon', 'error'); return null; } }
 async function editHolon(holon) { const currentType = holon.holon_type || defaultHolonType(); const values = await showModal({ title: 'Edit Holon', submitLabel: 'Save Changes', fields: [{ name: 'name', label: 'Name', required: true, value: holon.name || '' }, { name: 'holon_type', label: 'Type', type: 'combobox', options: holonTypeOptions(currentType), value: currentType, required: true, minChars: 0, allowCustom: false }] }); if (!values) return; const name = values.name.trim(), holonType = values.holon_type.trim(); if (!name || !holonType) return setStatus('Name and type are required', 'warn'); setStatus('Updating Holon…'); try { await eBliss.holons.update(holon.id, { name, holon_type: holonType }); await loadModel(); openHolon(holons.find(h => h.id === holon.id) || { ...holon, name, holon_type: holonType }); setStatus('Holon updated', 'success'); } catch (error) { setStatus(error.message || 'Unable to update Holon', 'error'); } }
 async function createRelationship() { if (holons.length < 2 || !relationshipTypes.length) return setStatus('Need at least two Holons and one relationship type', 'warn'); const values = await showModal({ title: 'New Relationship', submitLabel: 'Create Relationship', fields: [{ name: 'source_holon_id', label: 'Source Holon', type: 'select', options: holonOptions(), required: true }, { name: 'relationship_type_id', label: 'Relationship', type: 'select', options: relationshipTypeOptions(), required: true }, { name: 'target_holon_id', label: 'Target Holon', type: 'select', options: holonOptions(), required: true }, { name: 'position', label: 'Position', type: 'number', value: '0' }] }); if (!values) return; setStatus('Creating relationship…'); try { await eBliss.relationships.create({ source_holon_id: values.source_holon_id, relationship_type_id: values.relationship_type_id, target_holon_id: values.target_holon_id, position: Number(values.position) || 0 }); await loadModel(); setStatus('Relationship created', 'success'); } catch (error) { setStatus(error.message || 'Unable to create relationship', 'error'); } }
 async function loadModel() { const model = await loadHolons(eBliss); holons = model.holons || []; relationships = model.relationships || []; relationshipTypes = model.relationshipTypes || []; holonTypes = model.holonTypes || []; refreshGraphRootCombo(); updateHolonGraph({ holons, relationships, relationshipTypes }); restoreStoredGraphRoot(); if (selectedHolon) { const refreshed = holons.find(h => String(h.id) === String(selectedHolon.id)); renderHolonInspector(refreshed || null); } }
