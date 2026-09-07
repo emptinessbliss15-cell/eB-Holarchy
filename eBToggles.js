@@ -39,18 +39,34 @@ export function toggledOn(name) {
   return definition.default === true;
 }
 
+function syncFeatureDom(name, enabled) {
+  if (name !== 'graph.key') return;
+  const legend = document.getElementById('holonStatusLegend');
+  if (!legend) return;
+  // The graph's legend has an explicit display:flex rule, which can override
+  // the browser's default [hidden] rule. Use inline display so the feature
+  // state is authoritative regardless of stylesheet order.
+  legend.hidden = !enabled;
+  legend.style.display = enabled ? '' : 'none';
+}
+
 export async function loadToggles(userId = null) {
   currentUserId = userId;
   clearOverrides();
-  if (!userId) return effectiveState();
+  if (!userId) {
+    syncFeatureDom('graph.key', toggledOn('graph.key'));
+    return effectiveState();
+  }
   const rows = await eBliss.toggles.list();
   for (const row of rows || []) {
     if (row?.feature_name in toggleDefinitions) userOverrides[row.feature_name] = row.enabled === true;
   }
+  syncFeatureDom('graph.key', toggledOn('graph.key'));
   return effectiveState();
 }
 
 function notifyToggle(name, value, extra = {}) {
+  syncFeatureDom(name, value);
   window.dispatchEvent(new CustomEvent('feature:toggle', { detail: { name, enabled: value, ...extra } }));
 }
 
