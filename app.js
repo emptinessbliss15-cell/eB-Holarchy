@@ -44,6 +44,14 @@ function decodeDynamicContent(raw) {
   return { fields: {}, legacyContent: String(raw) };
 }
 
+function parseFieldDefinition(raw) {
+  if (raw === null || raw === undefined || raw === '') return {};
+  try {
+    const parsed = JSON.parse(String(raw));
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch { return {}; }
+}
+
 function encodeDynamicContent(fields, legacyContent = '') {
   const cleanFields = Object.fromEntries(Object.entries(fields || {}).filter(([, value]) => value !== undefined));
   if (!Object.keys(cleanFields).length) return String(legacyContent ?? '');
@@ -58,8 +66,8 @@ function dynamicFieldDefinitions(typeName) {
   const fieldTypeIds = new Set(holonTypes.filter(t => t.name === 'Holon Field').map(t => String(t.id)));
   const fieldIds = new Set(relationships.filter(r => String(r.target_holon_id) === String(typeHolon.id) && relationshipTypes.find(t => String(t.id) === String(r.relationship_type_id))?.name?.toLowerCase() === 'field of').map(r => String(r.source_holon_id)));
   return holons.filter(h => fieldIds.has(String(h.id)) && fieldTypeIds.has(String(h.holon_type_id))).map(field => {
-    const meta = decodeDynamicContent(field.Content);
-    return { id: field.id, name: field.name || '(unnamed field)', dataType: meta.fields.dataType || 'text', required: meta.fields.required === true, defaultValue: meta.fields.defaultValue ?? '', order: Number(meta.fields.order ?? 0) };
+    const meta = parseFieldDefinition(field.Content);
+    return { id: field.id, name: field.name || '(unnamed field)', dataType: meta.dataType || 'text', required: meta.required === true, defaultValue: meta.defaultValue ?? '', order: Number(meta.order ?? 0) };
   }).sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
 }
 
