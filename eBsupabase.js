@@ -61,6 +61,12 @@ export function createEBSupabase()
         if (!userId) throw new Error('A signed-in user is required to change feature toggles');
         return result('Feature toggle', await supabase.from('user_feature_toggles').upsert({ user_id: userId, feature_name: String(name), enabled: enabled === true }, { onConflict: 'user_id,feature_name' }).select().single());
       },
+      async reset(name)
+      {
+        const userId = await currentUserId();
+        if (!userId) throw new Error('A signed-in user is required to reset feature toggles');
+        return result('Feature toggle', await supabase.from('user_feature_toggles').delete().eq('user_id', userId).eq('feature_name', String(name)).select('feature_name').maybeSingle());
+      },
     },
     model: {
       async load()
