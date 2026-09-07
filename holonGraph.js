@@ -15,6 +15,7 @@ let navigationInstalled = false;
 let featureToggleListenerInstalled = false;
 let contextMenu = null;
 let contextMenuCleanup = null;
+let hoverPreview = null;
 
 const GRAPH_DEPTH_STORAGE_KEY = 'eB-Holarchy.graphDepth';
 
@@ -47,6 +48,11 @@ function installStyles() {
     .holon-status-legend { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 2px 0 8px; font-size: 11px; opacity: .9; }
     .holon-status-key { display: inline-flex; align-items: center; gap: 4px; }
     .holon-status-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; border: 1px solid rgba(0,0,0,.18); }
+    .holon-hover-preview { position: fixed; z-index: 10001; max-width: 320px; padding: 9px 11px; border: 1px solid var(--eb-border-strong, #888); border-radius: 7px; background: var(--eb-input-bg, #fff); color: var(--eb-text, #222); box-shadow: 0 8px 24px rgba(0,0,0,.2); pointer-events: none; font-size: 12px; line-height: 1.4; }
+    .holon-hover-preview[hidden] { display: none; }
+    .holon-hover-title { font-size: 13px; font-weight: 700; margin-bottom: 2px; overflow-wrap: anywhere; }
+    .holon-hover-type { font-size: 11px; opacity: .68; margin-bottom: 6px; }
+    .holon-hover-content { white-space: pre-wrap; overflow-wrap: anywhere; }
     @media (max-width: 760px) { .graph-context { min-width: 0; flex: 1; } .graph-context .hcg-autocomplete { min-width: 0; } #holonGraph { height: 55vh; min-height: 360px; } }
   `;
   document.head.appendChild(style);
@@ -72,6 +78,7 @@ function installStatusLegend() {
 function syncFeatureToggles() {
   const legend = document.getElementById('holonStatusLegend');
   if (legend) legend.hidden = !toggledOn('graph.key');
+  if (!toggledOn('graph.hoverInfo')) hideHoverPreview();
 }
 
 function installFeatureToggleListener() {
@@ -82,6 +89,67 @@ function installFeatureToggleListener() {
   });
   window.addEventListener('features:loaded', () => render());
   featureToggleListenerInstalled = true;
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function hoverContentFor(holon) {
+  const value = holon?.content ?? holon?.description ?? holon?.body ?? holon?.summary ?? holon?.notes ?? '';
+  const text = String(value ?? '').trim();
+  if (!text) return '';
+  return text.length > 240 ? `${text.slice(0, 237).trimEnd()}…` : text;
+}
+
+function hideHoverPreview() {
+  if (hoverPreview) hoverPreview.hidden = true;
+}
+
+function showHoverPreview(holon, event) {
+  if (!toggledOn('graph.hoverInfo') || !holon) return;
+  if (!hoverPreview) {
+    hoverPreview = document.createElement('div');
+    hoverPreview.className = 'holon-hover-preview';
+    hoverPreview.hidden = true;
+    hoverPreview.setAttribute('role', 'tooltip');
+    document.body.appendChild(hoverPreview);
+  }
+  const type = holon.holon_type || holon.holon_type_name || 'Holon';
+  const content = hoverContentFor(holon);
+  hoverPreview.innerHTML = `<div class="holon-hover-title">${escapeHtml(holon.name || '(unnamed)')}</div><div class="holon-hover-type">${escapeHtml(type)}</div>${content ? `<div class="holon-hover-content">${escapeHtml(content)}</div>` : ''}`;
+  hoverPreview.hidden = false;
+  const x = event.originalEvent?.clientX ?? event.renderedPosition?.x ?? 0;
+  const y = event.originalEvent?.clientY ?? event.renderedPosition?.y ?? 0;
+  const gap = 12;
+  const rect = hoverPreview.getBoundingClientRect();
+  hoverPreview.style.left = `${Math.min(x + gap, window.innerWidth - rect.width - 8)}px`;
+  hoverPreview.style.top = `${Math.min(y + gap, window.innerHeight - rect.height - 8)}px`;
+}
+
+function installHoverPreview() {
+  if (!cy) return;
+  cy.on('mouseover', 'node', event => {
+    const id = String(event.target.data('holonId'));
+    const holon = currentModel.holons.find(item => String(item.id) === id);
+    showHoverPreview(holon, event);
+  });
+  cy.on('mousemove', 'node', event => {
+    if (!hoverPreview || hoverPreview.hidden || !toggledOn('graph.hoverInfo')) return;
+    const x = event.originalEvent?.clientX ?? event.renderedPosition?.x ?? 0;
+    const y = event.originalEvent?.clientY ?? event.renderedPosition?.y ?? 0;
+    const rect = hoverPreview.getBoundingClientRect();
+    hoverPreview.style.left = `${Math.min(x + 12, window.innerWidth - rect.width - 8)}px`;
+    hoverPreview.style.top = `${Math.min(y + 12, window.innerHeight - rect.height - 8)}px`;
+  });
+  cy.on('mouseout', 'node', hideHoverPreview);
+  cy.on('tap', hideHoverPreview);
+  cy.on('pan zoom', hideHoverPreview);
 }
 
 function relationshipLabel(relationship, relationshipTypes) {
@@ -322,6 +390,7 @@ export function createHolonGraph({ element, holons, relationships, relationshipT
   cy.on('dbltap', 'node', event => { const id = String(event.target.data('holonId')); if (!currentModel.holons.some(item => String(item.id) === id)) return; currentRootId = id; const control = document.getElementById('graphRoot'); if (control) control.value = currentModel.holons.find(item => String(item.id) === id)?.name || ''; render(); const node = cy.nodes(`[id = "${id.replaceAll('"', '\\"')}"]`); node.select(); emitSelection(currentModel.holons.find(item => String(item.id) === id) || null); });
   cy.on('click', 'node', event => { const id = String(event.target.data('holonId')); emitSelection(currentModel.holons.find(item => String(item.id) === id) || null); });
   cy.on('tap', event => { if (event.target === cy) emitSelection(null); });
+  installHoverPreview();
   installContextMenu();
   updateNavigationButton();
   syncFeatureToggles();
@@ -339,5 +408,5 @@ export function getGraphParent() { return graphParentId(); }
 export function setGraphDepth(depth) { currentDepth = depth || 'all'; persistDepth(currentDepth); const control = document.getElementById('graphDepth'); if (control) control.value = String(currentDepth); render(); }
 export function setGraphProvenance(enabled) { showProvenance = Boolean(enabled); const control = document.getElementById('graphProvenance'); if (control) control.checked = showProvenance; render(); }
 export function updateHolonGraph(model) { if (!cy) return; currentModel = model || { holons: [], relationships: [], relationshipTypes: [] }; if (currentRootId && !currentModel.holons.some(h => String(h.id) === String(currentRootId))) currentRootId = null; render(); }
-export function destroyHolonGraph() { contextMenuCleanup?.(); cy?.destroy(); cy = null; currentRootId = null; selectionHandler = null; currentModel = { holons: [], relationships: [], relationshipTypes: [] }; }
+export function destroyHolonGraph() { contextMenuCleanup?.(); hideHoverPreview(); cy?.destroy(); cy = null; currentRootId = null; selectionHandler = null; currentModel = { holons: [], relationships: [], relationshipTypes: [] }; }
 export function getHolonGraph() { return cy; }
