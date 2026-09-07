@@ -281,7 +281,7 @@ function installContextMenu() {
   const style = document.createElement('style');
   style.id = 'holon-graph-context-style';
   style.textContent = `
-    .holon-context-menu { position: fixed; z-index: 10000; min-width: 170px; padding: 4px; border: 1px solid var(--eb-border-strong, #888); border-radius: 7px; background: var(--eb-input-bg, #fff); color: var(--eb-text, #222); box-shadow: 0 8px 24px rgba(0,0,0,.22); }
+    .holon-context-menu { position: fixed; z-index: 10002; min-width: 170px; padding: 4px; border: 1px solid var(--eb-border-strong, #888); border-radius: 7px; background: var(--eb-input-bg, #fff); color: var(--eb-text, #222); box-shadow: 0 8px 24px rgba(0,0,0,.22); }
     .holon-context-menu button { display: block; width: 100%; padding: 7px 10px; border: 0; border-radius: 4px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
     .holon-context-menu button:hover, .holon-context-menu button:focus-visible { background: var(--eb-border, #ddd); outline: none; }
     .holon-context-menu button.danger { color: #b91c1c; }
@@ -289,6 +289,7 @@ function installContextMenu() {
   `;
   document.head.appendChild(style);
   function showMenu(target, x, y) {
+    hideHoverPreview();
     closeContextMenu();
     const kind = target?.isNode?.() ? 'node' : target?.isEdge?.() ? 'edge' : 'background';
     const menu = document.createElement('div');
