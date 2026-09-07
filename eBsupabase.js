@@ -1,8 +1,6 @@
 // eBliss Supabase backend adapter.
-//
-// This is the only layer that knows how the current eBliss backend is
-// implemented with Supabase. The rest of the application talks to the
-// eBliss backend contract instead of calling Supabase directly.
+// The rest of the application talks to this backend contract instead of
+// calling Supabase directly.
 
 const SUPABASE_URL = 'https://zaabghrczrbqkxrhkinj.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_QL6Bz9m30CV8HFIdkLQ42Q_N9AFIOkF';
@@ -22,21 +20,14 @@ export function createEBSupabase()
   async function resolveHolonValues(values)
   {
     const normalized = { ...values };
-
     if (normalized.holon_type !== undefined)
     {
       const typeName = String(normalized.holon_type).trim();
       delete normalized.holon_type;
-
-      const response = await supabase
-        .from('holon_types')
-        .select('id')
-        .eq('name', typeName)
-        .single();
+      const response = await supabase.from('holon_types').select('id').eq('name', typeName).single();
       const type = result('Holon type', response);
       normalized.holon_type_id = type.id;
     }
-
     return normalized;
   }
 
@@ -49,6 +40,33 @@ export function createEBSupabase()
       signOut() { return supabase.auth.signOut({ scope: 'local' }); },
     },
 
+    profile: {
+      async get(userId)
+      {
+        const response = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+        return result('Profile', response);
+      },
+      async upsert(userId, values)
+      {
+        const response = await supabase.from('profiles').upsert({ id: userId, ...values }, { onConflict: 'id' }).select().single();
+        return result('Profile', response);
+      },
+    },
+
+    toggles: {
+      async list(userId = null)
+      {
+        const query = supabase.from('user_feature_toggles').select('feature_name, enabled, updated_at').order('feature_name');
+        if (userId) query.eq('user_id', userId);
+        return result('Feature toggles', await query);
+      },
+      async set(userId, name, enabled)
+      {
+        const response = await supabase.from('user_feature_toggles').upsert({ user_id: userId, feature_name: String(name), enabled: enabled === true }, { onConflict: 'user_id,feature_name' }).select().single();
+        return result('Feature toggle', response);
+      },
+    },
+
     model: {
       async load()
       {
@@ -58,7 +76,6 @@ export function createEBSupabase()
           supabase.from('relationship_types').select('*').order('name'),
           supabase.from('holon_types').select('*').order('name'),
         ]);
-
         return {
           holons: result('Holons', holons) || [],
           relationships: result('Relationships', relationships) || [],
@@ -72,31 +89,21 @@ export function createEBSupabase()
       async create(values)
       {
         const normalized = await resolveHolonValues(values);
-        const response = await supabase.from('holons').insert(normalized).select().single();
-        return result('Holon', response);
+        return result('Holon', await supabase.from('holons').insert(normalized).select().single());
       },
-
       async get(holonId)
       {
-        const response = await supabase.from('holons_view').select('*').eq('id', holonId).single();
-        return result('Holon', response);
+        return result('Holon', await supabase.from('holons_view').select('*').eq('id', holonId).single());
       },
-
       async update(holonId, values)
       {
         const normalized = await resolveHolonValues(values);
-        const response = await supabase.from('holons').update(normalized).eq('id', holonId).select().single();
-        return result('Holon', response);
+        return result('Holon', await supabase.from('holons').update(normalized).eq('id', holonId).select().single());
       },
-
       async delete(holonId)
       {
-        const relationshipResult = await supabase.from('relationships').delete()
-          .or(`source_holon_id.eq.${holonId},target_holon_id.eq.${holonId}`);
-        result('Relationships', relationshipResult);
-
-        const holonResult = await supabase.from('holons').delete().eq('id', holonId).select('id').single();
-        result('Holon', holonResult);
+        result('Relationships', await supabase.from('relationships').delete().or(`source_holon_id.eq.${holonId},target_holon_id.eq.${holonId}`));
+        return result('Holon', await supabase.from('holons').delete().eq('id', holonId).select('id').single());
       },
     },
 
@@ -105,41 +112,16 @@ export function createEBSupabase()
       {
         const name = String(values?.name ?? '').trim();
         if (!name) throw new Error('Holon type name is required');
-
         const description = String(values?.description ?? '').trim();
-        const response = await supabase
-          .from('holon_types')
-          .insert({ name, description })
-          .select()
-          .single();
-        return result('Holon type', response);
+        return result('Holon type', await supabase.from('holon_types').insert({ name, description }).select().single());
       },
     },
 
     relationships: {
-      async create(values)
-      {
-        const response = await supabase.from('relationships').insert(values).select().single();
-        return result('Relationship', response);
-      },
-
-      async get(relationshipId)
-      {
-        const response = await supabase.from('relationships_view').select('*').eq('id', relationshipId).single();
-        return result('Relationship', response);
-      },
-
-      async update(relationshipId, values)
-      {
-        const response = await supabase.from('relationships').update(values).eq('id', relationshipId).select().single();
-        return result('Relationship', response);
-      },
-
-      async delete(relationshipId)
-      {
-        const response = await supabase.from('relationships').delete().eq('id', relationshipId).select('id').single();
-        return result('Relationship', response);
-      },
+      async create(values) { return result('Relationship', await supabase.from('relationships').insert(values).select().single()); },
+      async get(relationshipId) { return result('Relationship', await supabase.from('relationships_view').select('*').eq('id', relationshipId).single()); },
+      async update(relationshipId, values) { return result('Relationship', await supabase.from('relationships').update(values).eq('id', relationshipId).select().single()); },
+      async delete(relationshipId) { return result('Relationship', await supabase.from('relationships').delete().eq('id', relationshipId).select('id').single()); },
     },
   };
 }
