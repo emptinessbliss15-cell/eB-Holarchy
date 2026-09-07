@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="./holonInspector.css">
     <style>
         .workspace-primary { grid-template-columns: minmax(0, 1fr) minmax(280px, 360px); align-items: stretch; }
-        .workspace-primary .panel-graph { grid-column: auto; }
+        .workspace-primary .panel-graph { grid-column: auto; position: relative; }
         .workspace-grids { grid-template-columns: minmax(0, 1fr); }
         #grid { min-height: 0; }
         .holon-inspector { min-height: 460px; padding: 0 0 12px; overflow: hidden; }
@@ -44,6 +44,7 @@
         .eb-feature-toggle { display: flex; align-items: center; gap: 8px; padding: 5px 0; cursor: pointer; font-size: 13px; }
         .eb-feature-toggle input { margin: 0; }
         .eb-auth-avatar { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; display: block; }
+        .holon-status-legend { position: absolute; z-index: 2; top: 58px; left: 12px; margin: 0; padding: 5px 8px; border: 1px solid var(--eb-border); border-radius: 6px; background: color-mix(in srgb, var(--eb-bg) 88%, transparent); backdrop-filter: blur(3px); }
         @media (max-width: 760px) {
             .workspace-primary { grid-template-columns: 1fr; }
             .holarchy-heading { align-items: stretch; }
