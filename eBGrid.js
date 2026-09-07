@@ -43,12 +43,21 @@ export class eBGrid {
     this._cancelCustomEditor();
 
     const originalValue = row[column.key] ?? '';
+    const isCheckbox = editor.type === 'checkbox';
     const isLongText = editor.type === 'textarea'
       || (editor.type === 'text' && String(originalValue).length > 100);
     const input = document.createElement(isLongText ? 'textarea' : 'input');
-    if (!isLongText) input.type = 'text';
-    input.value = String(originalValue);
+    if (!isLongText) input.type = isCheckbox ? 'checkbox' : (editor.inputType || 'text');
     input.className = isLongText ? 'vg-edit-textarea' : 'vg-edit-input';
+    if (isCheckbox) {
+      input.checked = originalValue === true || String(originalValue).toLowerCase() === 'true';
+    } else {
+      input.value = String(originalValue);
+    }
+    if (editor.min != null) input.min = String(editor.min);
+    if (editor.max != null) input.max = String(editor.max);
+    if (editor.step != null) input.step = String(editor.step);
+    if (editor.placeholder != null) input.placeholder = String(editor.placeholder);
     if (isLongText) {
       const lineCount = String(originalValue).split(/\r?\n/).length;
       input.rows = editor.rows ?? Math.min(12, Math.max(6, lineCount));
@@ -79,11 +88,13 @@ export class eBGrid {
     const commit = (value) => {
       if (finished) return;
       finished = true;
-      const nextValue = isLongText
-        ? String(value ?? '')
-        : String(value ?? '').trim();
+      const nextValue = isCheckbox
+        ? Boolean(input.checked)
+        : isLongText
+          ? String(value ?? '')
+          : String(value ?? '').trim();
       cleanup();
-      if (nextValue === String(originalValue)) {
+      if (nextValue === originalValue || String(nextValue) === String(originalValue)) {
         this.grid.refresh();
         return;
       }
@@ -115,10 +126,16 @@ export class eBGrid {
       input.value = String(editor.value ?? originalValue);
       input.focus();
       input.select();
-    } else if (editor.type === 'text' || editor.type === 'textarea') {
+    } else if (editor.type === 'text' || editor.type === 'textarea' || editor.type === 'input') {
       input.focus();
-      input.select();
+      if (!isCheckbox) input.select();
+    } else if (editor.type === 'checkbox') {
+      input.focus();
     }
+
+    input.addEventListener('change', () => {
+      if (isCheckbox) commit(input.checked);
+    });
 
     input.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') {
@@ -130,7 +147,7 @@ export class eBGrid {
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
-        commit(input.value);
+        commit(isCheckbox ? input.checked : input.value);
       } else if (event.key === 'Enter' && isLongText && (event.ctrlKey || event.metaKey)) {
         event.preventDefault();
         event.stopPropagation();
