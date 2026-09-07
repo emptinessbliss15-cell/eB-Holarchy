@@ -10,6 +10,8 @@ let selectionHandler = null;
 let depthListenerInstalled = false;
 let provenanceListenerInstalled = false;
 let navigationInstalled = false;
+let contextMenu = null;
+let contextMenuCleanup = null;
 
 const GRAPH_DEPTH_STORAGE_KEY = 'eB-Holarchy.graphDepth';
 
@@ -192,6 +194,70 @@ function installNavigation() {
   updateNavigationButton();
 }
 
+function closeContextMenu() {
+  contextMenu?.remove();
+  contextMenu = null;
+}
+
+function installContextMenu() {
+  if (contextMenuCleanup) return;
+  const container = document.getElementById('holonGraph');
+  if (!container) return;
+  const style = document.createElement('style');
+  style.id = 'holon-graph-context-style';
+  style.textContent = `
+    .holon-context-menu { position: fixed; z-index: 10000; min-width: 170px; padding: 4px; border: 1px solid var(--eb-border-strong, #888); border-radius: 7px; background: var(--eb-input-bg, #fff); color: var(--eb-text, #222); box-shadow: 0 8px 24px rgba(0,0,0,.22); }
+    .holon-context-menu button { display: block; width: 100%; padding: 7px 10px; border: 0; border-radius: 4px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+    .holon-context-menu button:hover, .holon-context-menu button:focus-visible { background: var(--eb-border, #ddd); outline: none; }
+    .holon-context-menu button.danger { color: #b91c1c; }
+    .holon-context-menu .context-separator { height: 1px; margin: 4px 2px; background: var(--eb-border, #ddd); }
+  `;
+  document.head.appendChild(style);
+
+  function showMenu(target, x, y) {
+    closeContextMenu();
+    const kind = target?.isNode?.() ? 'node' : target?.isEdge?.() ? 'edge' : 'background';
+    const menu = document.createElement('div');
+    menu.className = 'holon-context-menu';
+    menu.setAttribute('role', 'menu');
+    const add = (label, action, danger = false) => {
+      const button = document.createElement('button');
+      button.type = 'button'; button.textContent = label; button.setAttribute('role', 'menuitem');
+      if (danger) button.classList.add('danger');
+      button.addEventListener('click', () => { closeContextMenu(); action(); });
+      menu.appendChild(button);
+    };
+    const separator = () => { const line = document.createElement('div'); line.className = 'context-separator'; menu.appendChild(line); };
+    const holon = kind === 'node' ? currentModel.holons.find(item => String(item.id) === String(target.data('holonId'))) : null;
+    const relationship = kind === 'edge' ? target.data('relationship') : null;
+    if (kind === 'node' && holon) {
+      add('Inspect Holon', () => emitSelection(holon));
+      add('Set as Graph Root', () => { currentRootId = String(holon.id); const control = document.getElementById('graphRoot'); if (control) control.value = holon.name || ''; render(); target.select(); emitSelection(holon); });
+      add('Create Holon Here', () => window.dispatchEvent(new CustomEvent('holon:contextcreate', { detail: { parent: holon } })));
+      separator();
+      add('Edit Holon', () => window.dispatchEvent(new CustomEvent('holon:contextedit', { detail: { holon } })));
+      add('Delete Holon', () => window.dispatchEvent(new CustomEvent('holon:contextdelete', { detail: { holon } })), true);
+    } else if (kind === 'edge' && relationship) {
+      add('Inspect Relationship', () => window.dispatchEvent(new CustomEvent('relationship:selected', { detail: relationship })));
+      add('Delete Relationship', () => window.dispatchEvent(new CustomEvent('relationship:contextdelete', { detail: { relationship } })), true);
+    } else {
+      add('New Holon', () => window.dispatchEvent(new CustomEvent('holon:contextcreate')));
+    }
+    document.body.appendChild(menu);
+    contextMenu = menu;
+    const rect = menu.getBoundingClientRect();
+    menu.style.left = `${Math.min(x, window.innerWidth - rect.width - 8)}px`;
+    menu.style.top = `${Math.min(y, window.innerHeight - rect.height - 8)}px`;
+    menu.querySelector('button')?.focus();
+  }
+
+  const handler = event => { if (contextMenu && !contextMenu.contains(event.target)) closeContextMenu(); };
+  document.addEventListener('pointerdown', handler, true);
+  document.addEventListener('keydown', event => { if (event.key === 'Escape') closeContextMenu(); });
+  contextMenuCleanup = () => { document.removeEventListener('pointerdown', handler, true); closeContextMenu(); style.remove(); contextMenuCleanup = null; };
+  cy?.on('cxttap', event => showMenu(event.target === cy ? null : event.target, event.originalEvent?.clientX ?? event.renderedPosition.x, event.originalEvent?.clientY ?? event.renderedPosition.y));
+}
+
 function render() {
   if (!cy) return;
   const model = visibleModel();
@@ -237,7 +303,7 @@ function installProvenanceControl() {
 export function createHolonGraph({ element, holons, relationships, relationshipTypes = [], rootId = null, onSelect = null }) {
   if (!element) return null;
   if (!window.cytoscape) throw new Error('Cytoscape is not loaded');
-  installStyles(); installStatusLegend(); installDepthControl(); installProvenanceControl(); installNavigation(); cy?.destroy(); selectionHandler = onSelect;
+  installStyles(); installStatusLegend(); installDepthControl(); installProvenanceControl(); installNavigation(); cy?.destroy(); closeContextMenu(); selectionHandler = onSelect;
   currentModel = { holons, relationships, relationshipTypes };
   currentRootId = rootId || null;
   const dark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
@@ -256,6 +322,7 @@ export function createHolonGraph({ element, holons, relationships, relationshipT
   cy.on('dbltap', 'node', event => { const id = String(event.target.data('holonId')); if (!currentModel.holons.some(item => String(item.id) === id)) return; currentRootId = id; const control = document.getElementById('graphRoot'); if (control) control.value = currentModel.holons.find(item => String(item.id) === id)?.name || ''; render(); const node = cy.nodes(`[id = "${id.replaceAll('"', '\\"')}"]`); node.select(); emitSelection(currentModel.holons.find(item => String(item.id) === id) || null); });
   cy.on('click', 'node', event => { const id = String(event.target.data('holonId')); emitSelection(currentModel.holons.find(item => String(item.id) === id) || null); });
   cy.on('tap', event => { if (event.target === cy) emitSelection(null); });
+  installContextMenu();
   updateNavigationButton();
   return cy;
 }
@@ -279,5 +346,5 @@ export function setGraphDepth(depth) {
 }
 export function setGraphProvenance(enabled) { showProvenance = Boolean(enabled); const control = document.getElementById('graphProvenance'); if (control) control.checked = showProvenance; render(); }
 export function updateHolonGraph(model) { if (!cy) return; currentModel = model || { holons: [], relationships: [], relationshipTypes: [] }; if (currentRootId && !currentModel.holons.some(h => String(h.id) === String(currentRootId))) currentRootId = null; render(); }
-export function destroyHolonGraph() { cy?.destroy(); cy = null; currentRootId = null; selectionHandler = null; currentModel = { holons: [], relationships: [], relationshipTypes: [] }; }
+export function destroyHolonGraph() { contextMenuCleanup?.(); cy?.destroy(); cy = null; currentRootId = null; selectionHandler = null; currentModel = { holons: [], relationships: [], relationshipTypes: [] }; }
 export function getHolonGraph() { return cy; }
