@@ -41,6 +41,9 @@
         .holons-panel > .panel-heading > h3 { min-width: 0 !important; margin: 0 !important; }
         .holons-panel > .panel-heading > .panel-actions { display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important; justify-content: flex-end !important; gap: 8px !important; width: auto !important; min-width: max-content !important; margin: 0 !important; }
         .holons-panel > .panel-heading > .panel-actions > button { display: inline-block !important; flex: 0 0 auto !important; white-space: nowrap !important; }
+        .eb-feature-toggle { display: flex; align-items: center; gap: 8px; padding: 5px 0; cursor: pointer; font-size: 13px; }
+        .eb-feature-toggle input { margin: 0; }
+        .eb-auth-avatar { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; display: block; }
         @media (max-width: 760px) {
             .workspace-primary { grid-template-columns: 1fr; }
             .holarchy-heading { align-items: stretch; }
@@ -55,40 +58,10 @@
         <div id="status"></div>
         <main class="eb-main">
             <section id="app" class="card" hidden>
-                <div class="workspace-grid workspace-grids">
-                    <section class="panel holons-panel"><div class="panel-heading"><h3>Holons</h3><div class="panel-actions"><button id="newHolon" type="button">+ Holon</button><button id="newHolonType" type="button">+ Type</button></div></div><div id="grid" aria-label="Holons"></div></section>
-                </div>
+                <div class="workspace-grid workspace-grids"><section class="panel holons-panel"><div class="panel-heading"><h3>Holons</h3><div class="panel-actions"><button id="newHolon" type="button">+ Holon</button><button id="newHolonType" type="button">+ Type</button></div></div><div id="grid" aria-label="Holons"></div></section></div>
                 <div class="workspace-grid workspace-primary">
-                    <section class="panel panel-graph">
-                        <div class="panel-heading holarchy-heading">
-                            <h3>Holarchy</h3>
-                            <div class="holarchy-filter" role="group" aria-label="Holarchy filters">
-                                <div class="holarchy-filter-field">
-                                    <span>Root</span>
-                                    <input id="graphRoot" type="text" autocomplete="off" aria-label="Holarchy graph root" placeholder="Choose a root Holon…">
-                                </div>
-                                <div class="holarchy-filter-field">
-                                    <span>Depth</span>
-                                    <select id="graphDepth" aria-label="Holarchy graph depth">
-                                        <option value="1">1</option>
-                                        <option value="2" selected>2</option>
-                                        <option value="3">3</option>
-                                        <option value="4">4</option>
-                                        <option value="all">∞</option>
-                                    </select>
-                                </div>
-                                <div class="holarchy-filter-prov">
-                                    <input id="graphProvenance" type="checkbox" aria-label="Show provenance">
-                                    <label for="graphProvenance">Prov</label>
-                                </div>
-                            </div>
-                        </div>
-                        <div id="holonGraph" aria-label="Holon relationship graph"></div>
-                    </section>
-                    <aside id="holonInspector" class="panel holon-inspector" aria-label="Object properties">
-                        <div class="panel-heading"><h3>Object Properties</h3></div>
-                        <div id="holonInspectorContent" class="muted">Select an object to inspect its properties.</div>
-                    </aside>
+                    <section class="panel panel-graph"><div class="panel-heading holarchy-heading"><h3>Holarchy</h3><div class="holarchy-filter" role="group" aria-label="Holarchy filters"><div class="holarchy-filter-field"><span>Root</span><input id="graphRoot" type="text" autocomplete="off" aria-label="Holarchy graph root" placeholder="Choose a root Holon…"></div><div class="holarchy-filter-field"><span>Depth</span><select id="graphDepth" aria-label="Holarchy graph depth"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option><option value="all">∞</option></select></div><div class="holarchy-filter-prov"><input id="graphProvenance" type="checkbox" aria-label="Show provenance"><label for="graphProvenance">Prov</label></div></div></div><div id="holonGraph" aria-label="Holon relationship graph"></div></section>
+                    <aside id="holonInspector" class="panel holon-inspector" aria-label="Object properties"><div class="panel-heading"><h3>Object Properties</h3></div><div id="holonInspectorContent" class="muted">Select an object to inspect its properties.</div></aside>
                 </div>
             </section>
         </main>
@@ -106,6 +79,8 @@
         await import('./CFstatus.js').then(({ CFstatus }) => { window.ebCFStatus = CFstatus.init(); });
         await import(`./app.js?v=${Date.now()}`);
         await import('./relationshipInspector.js');
+        await import('./eBProfiles.js').then(({ initProfiles }) => initProfiles());
+        await import('./eBToggles.js').then(({ initToggles }) => initToggles());
     </script>
 </body>
 </html>
