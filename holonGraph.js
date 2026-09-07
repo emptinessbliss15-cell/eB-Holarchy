@@ -1,3 +1,5 @@
+import { toggledOn } from './eBToggles.js';
+
 // Holon Graph — visual model of Holons and their relationships.
 // Cytoscape is kept as the rendering primitive; the app owns the Holon model.
 
@@ -10,6 +12,7 @@ let selectionHandler = null;
 let depthListenerInstalled = false;
 let provenanceListenerInstalled = false;
 let navigationInstalled = false;
+let featureToggleListenerInstalled = false;
 let contextMenu = null;
 let contextMenuCleanup = null;
 
@@ -66,43 +69,47 @@ function installStatusLegend() {
   graph.parentElement.insertBefore(legend, graph);
 }
 
+function syncFeatureToggles() {
+  const legend = document.getElementById('holonStatusLegend');
+  if (legend) legend.hidden = !toggledOn('graph.key');
+}
+
+function installFeatureToggleListener() {
+  if (featureToggleListenerInstalled) return;
+  window.addEventListener('feature:toggle', event => {
+    if (!event.detail?.name?.startsWith('graph.')) return;
+    render();
+  });
+  window.addEventListener('features:loaded', () => render());
+  featureToggleListenerInstalled = true;
+}
+
 function relationshipLabel(relationship, relationshipTypes) {
   return relationship.relationship_type || relationship.relationship_type_name || relationshipTypes.find(type => type.id === relationship.relationship_type_id)?.name || 'relationship';
 }
 
-// Return every Holon within N relationship hops of the root.
-// This is intentionally direction-agnostic: a relationship does not imply
-// parent/child hierarchy. Direction remains visible on the Cytoscape edge,
-// but traversal treats both endpoints as neighbors.
 function relatedWithinDepth(rootId, holons, relationships) {
   if (!rootId) return holons;
   const root = String(rootId);
   if (!holons.some(holon => String(holon.id) === root)) return [];
-
   const distance = new Map([[root, 0]]);
   const queue = [root];
-
   while (queue.length) {
     const current = queue.shift();
     const depth = distance.get(current);
     if (currentDepth !== 'all' && depth >= Number(currentDepth)) continue;
-
     for (const relationship of relationships) {
       const source = String(relationship.source_holon_id ?? '');
       const target = String(relationship.target_holon_id ?? '');
       let neighbor = null;
-
       if (source === current) neighbor = target;
       else if (target === current) neighbor = source;
-
       if (!neighbor || distance.has(neighbor)) continue;
       if (!holons.some(holon => String(holon.id) === neighbor)) continue;
-
       distance.set(neighbor, depth + 1);
       queue.push(neighbor);
     }
   }
-
   return holons.filter(holon => distance.has(String(holon.id)));
 }
 
@@ -213,7 +220,6 @@ function installContextMenu() {
     .holon-context-menu .context-separator { height: 1px; margin: 4px 2px; background: var(--eb-border, #ddd); }
   `;
   document.head.appendChild(style);
-
   function showMenu(target, x, y) {
     closeContextMenu();
     const kind = target?.isNode?.() ? 'node' : target?.isEdge?.() ? 'edge' : 'background';
@@ -250,7 +256,6 @@ function installContextMenu() {
     menu.style.top = `${Math.min(y, window.innerHeight - rect.height - 8)}px`;
     menu.querySelector('button')?.focus();
   }
-
   const handler = event => { if (contextMenu && !contextMenu.contains(event.target)) closeContextMenu(); };
   document.addEventListener('pointerdown', handler, true);
   document.addEventListener('keydown', event => { if (event.key === 'Escape') closeContextMenu(); });
@@ -260,14 +265,13 @@ function installContextMenu() {
 
 function render() {
   if (!cy) return;
+  syncFeatureToggles();
   const model = visibleModel();
   const elements = buildElements(model.holons, model.relationships, model.relationshipTypes);
-
   cy.batch(() => {
     cy.elements().remove();
     if (elements.length) cy.add(elements);
   });
-
   if (model.holons.length) {
     cy.layout({ name: 'cose', animate: false, fit: true, padding: 40 }).run();
     cy.fit(cy.nodes(), 40);
@@ -282,11 +286,7 @@ function installDepthControl() {
   const persisted = readPersistedDepth();
   currentDepth = persisted || control.value || 2;
   control.value = String(currentDepth);
-  control.addEventListener('change', () => {
-    currentDepth = control.value || 2;
-    persistDepth(currentDepth);
-    render();
-  });
+  control.addEventListener('change', () => { currentDepth = control.value || 2; persistDepth(currentDepth); render(); });
   persistDepth(currentDepth);
   depthListenerInstalled = true;
 }
@@ -303,7 +303,7 @@ function installProvenanceControl() {
 export function createHolonGraph({ element, holons, relationships, relationshipTypes = [], rootId = null, onSelect = null }) {
   if (!element) return null;
   if (!window.cytoscape) throw new Error('Cytoscape is not loaded');
-  installStyles(); installStatusLegend(); installDepthControl(); installProvenanceControl(); installNavigation(); cy?.destroy(); closeContextMenu(); selectionHandler = onSelect;
+  installStyles(); installStatusLegend(); installDepthControl(); installProvenanceControl(); installNavigation(); installFeatureToggleListener(); cy?.destroy(); closeContextMenu(); selectionHandler = onSelect;
   currentModel = { holons, relationships, relationshipTypes };
   currentRootId = rootId || null;
   const dark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
@@ -324,6 +324,7 @@ export function createHolonGraph({ element, holons, relationships, relationshipT
   cy.on('tap', event => { if (event.target === cy) emitSelection(null); });
   installContextMenu();
   updateNavigationButton();
+  syncFeatureToggles();
   return cy;
 }
 
@@ -334,16 +335,8 @@ export function setGraphRoot(rootId) {
 }
 
 export function getGraphRoot() { return currentRootId; }
-
 export function getGraphParent() { return graphParentId(); }
-
-export function setGraphDepth(depth) {
-  currentDepth = depth || 'all';
-  persistDepth(currentDepth);
-  const control = document.getElementById('graphDepth');
-  if (control) control.value = String(currentDepth);
-  render();
-}
+export function setGraphDepth(depth) { currentDepth = depth || 'all'; persistDepth(currentDepth); const control = document.getElementById('graphDepth'); if (control) control.value = String(currentDepth); render(); }
 export function setGraphProvenance(enabled) { showProvenance = Boolean(enabled); const control = document.getElementById('graphProvenance'); if (control) control.checked = showProvenance; render(); }
 export function updateHolonGraph(model) { if (!cy) return; currentModel = model || { holons: [], relationships: [], relationshipTypes: [] }; if (currentRootId && !currentModel.holons.some(h => String(h.id) === String(currentRootId))) currentRootId = null; render(); }
 export function destroyHolonGraph() { contextMenuCleanup?.(); cy?.destroy(); cy = null; currentRootId = null; selectionHandler = null; currentModel = { holons: [], relationships: [], relationshipTypes: [] }; }
