@@ -57,7 +57,14 @@ export async function editProfile() {
     submitLabel: 'Save Profile',
     fields: [
       { name: 'display_name', label: 'Name', value: currentProfile?.display_name || user.email?.split('@')[0] || '' },
-      { name: 'avatar', label: 'Avatar', type: 'file', accept: 'image/*' },
+      {
+        name: 'avatar',
+        label: 'Avatar',
+        type: 'file',
+        accept: 'image/*',
+        preview: avatarDataUrl(currentProfile),
+        previewAlt: 'Current profile avatar',
+      },
     ],
   });
   if (!values) return null;
