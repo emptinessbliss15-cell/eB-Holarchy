@@ -18,7 +18,7 @@ export const toggleDefinitions = Object.freeze({
     description: 'Experimental relationship creation',
   },
   'graph.fCoSE': {
-    label: 'fCoSE layout',
+    label: 'fCOSE layout',
     default: false,
     description: 'Experimental graph layout',
   },
@@ -77,6 +77,14 @@ export async function loadToggles(userId = null) {
   return effectiveState();
 }
 
+function notifyToggle(name, value, extra = {}) {
+  // Keep feature consumers decoupled from the Features menu. The event is the
+  // refresh signal; components that own a feature decide how to respond.
+  window.dispatchEvent(new CustomEvent('feature:toggle', {
+    detail: { name, enabled: value, ...extra },
+  }));
+}
+
 export async function setToggle(name, enabled) {
   const key = String(name);
   if (!(key in toggleDefinitions)) return false;
@@ -85,9 +93,7 @@ export async function setToggle(name, enabled) {
   const value = enabled === true;
   await eBliss.toggles.set(key, value);
   userOverrides[key] = value;
-  window.dispatchEvent(new CustomEvent('feature:toggle', {
-    detail: { name: key, enabled: value },
-  }));
+  notifyToggle(key, value);
   return value;
 }
 
@@ -99,9 +105,7 @@ export async function resetToggle(name) {
   await eBliss.toggles.reset(key);
   delete userOverrides[key];
   const value = toggledOn(key);
-  window.dispatchEvent(new CustomEvent('feature:toggle', {
-    detail: { name: key, enabled: value, reset: true },
-  }));
+  notifyToggle(key, value, { reset: true });
   return value;
 }
 
