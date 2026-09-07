@@ -7,6 +7,9 @@
     <link rel="icon" type="image/png" sizes="48x48" href="./img/favicon48.png">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./vendor/cytoscape.min.js"></script>
+    <script src="https://unpkg.com/layout-base/layout-base.js"></script>
+    <script src="https://unpkg.com/cose-base/cose-base.js"></script>
+    <script src="https://raw.githubusercontent.com/emptinessbliss15-cell/cytoscape.js-fcose/master/cytoscape-fcose.js"></script>
     <link rel="stylesheet" href="./vendor/vanillagrid.css">
     <link rel="stylesheet" href="./vendor/hcg-autocomplete.css">
     <link rel="stylesheet" href="./app.css">
@@ -78,10 +81,12 @@
         document.addEventListener('click', event => { if (!logoMenu?.open) return; if (logoMenu.contains(event.target)) return; logoMenu.removeAttribute('open'); });
         await import('./eBStatus.js').then(({ eBStatus }) => { eBStatus.init(); window.ebStatus = eBStatus; });
         await import('./CFstatus.js').then(({ CFstatus }) => { window.ebCFStatus = CFstatus.init(); });
+        await import('./fcoseAdapter.js');
         await import(`./app.js?v=${Date.now()}`);
         await import('./relationshipInspector.js');
         await import('./eBProfiles.js').then(({ initProfiles }) => initProfiles());
         await import('./eBToggles.js').then(({ initToggles }) => initToggles());
+        window.dispatchEvent(new CustomEvent('features:loaded'));
     </script>
 </body>
 </html>
