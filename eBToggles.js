@@ -1,8 +1,20 @@
 import { eBliss } from './eBSDK.js';
 
+const DEFAULTS = Object.freeze({
+  'graph.key': true,
+  'graph.hoverInfo': false,
+  'graph.edgeHandles': false,
+  'graph.fCoSE': false,
+  'graph.undoRedo': false,
+});
 const state = Object.create(null);
 let initialized = false;
 let currentUserId = null;
+
+function resetToDefaults() {
+  for (const key of Object.keys(state)) delete state[key];
+  Object.assign(state, DEFAULTS);
+}
 
 export function toggleDon(name) {
   return state[String(name)] === true;
@@ -10,7 +22,7 @@ export function toggleDon(name) {
 
 export async function loadToggles(userId = null) {
   currentUserId = userId;
-  for (const key of Object.keys(state)) delete state[key];
+  resetToDefaults();
   if (!userId) return { ...state };
   const rows = await eBliss.toggles.list();
   for (const row of rows || []) state[row.feature_name] = row.enabled === true;
