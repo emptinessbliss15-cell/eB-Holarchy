@@ -123,7 +123,7 @@ export class eBGrid {
           commit(value);
         },
       });
-      input.value = String(editor.value ?? originalValue);
+      input.value = String(editor.displayValue ?? editor.value ?? originalValue);
       input.focus();
       input.select();
     } else if (editor.type === 'text' || editor.type === 'textarea' || editor.type === 'input') {
