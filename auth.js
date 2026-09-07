@@ -36,6 +36,11 @@ function buildAuth(container, { api, onSession, setStatus })
   signUp.addEventListener('click', async () => { const result = await api.auth.signUp(email.value.trim(), password.value); if (result.error) return showError(result.error); if (result.data.session) { details.removeAttribute('open'); await onSession(result.data.session); } else setStatus('Account created. Check your email as confirmation is required.'); });
   signOut.addEventListener('click', async () => { const result = await api.auth.signOut(); if (result.error) return showError(result.error); details.removeAttribute('open'); await onSession(null); });
 
+  document.addEventListener('click', event =>
+  {
+    if (details.open && !details.contains(event.target)) details.removeAttribute('open');
+  });
+
   const renderProfileAvatar = profileData =>
   {
     icon.replaceChildren();
