@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>eB Lists</title>
+    <title>eB Holarchy</title>
     <link rel="icon" type="image/png" sizes="48x48" href="./img/favicon48.png">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./vendor/cytoscape.min.js"></script>
@@ -85,9 +85,9 @@
                         </div>
                         <div id="holonGraph" aria-label="Holon relationship graph"></div>
                     </section>
-                    <aside id="holonInspector" class="panel holon-inspector" aria-label="Holon properties">
-                        <div class="panel-heading"><h3>Holon Properties</h3></div>
-                        <div id="holonInspectorContent" class="muted">Select a Holon to inspect its properties.</div>
+                    <aside id="holonInspector" class="panel holon-inspector" aria-label="Object properties">
+                        <div class="panel-heading"><h3>Object Properties</h3></div>
+                        <div id="holonInspectorContent" class="muted">Select an object to inspect its properties.</div>
                     </aside>
                 </div>
             </section>
@@ -105,6 +105,7 @@
         await import('./eBStatus.js').then(({ eBStatus }) => { eBStatus.init(); window.ebStatus = eBStatus; });
         await import('./CFstatus.js').then(({ CFstatus }) => { window.ebCFStatus = CFstatus.init(); });
         await import(`./app.js?v=${Date.now()}`);
+        await import('./relationshipInspector.js');
     </script>
 </body>
 </html>
