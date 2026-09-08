@@ -4,6 +4,7 @@ let container = null;
 let inspectorObserver = null;
 let pendingTargets = new Map();
 let selectedHolonId = null;
+let selectedHolon = null;
 
 function escapeHtml(value)
 {
@@ -93,11 +94,80 @@ function hideLegacySchemaContent()
   if (contentRow >= 0) rows[contentRow].hidden = true;
 }
 
+async function addDynamicField()
+{
+  if (!selectedHolon?.holon_type) return;
+  const name = window.prompt(`Add a field to ${selectedHolon.holon_type}`, 'test prov field');
+  if (name === null) return;
+  const trimmed = String(name).trim();
+  if (!trimmed) return;
+  try
+  {
+    setStatus('Adding field…');
+    await eBliss.fieldDefinitions.create(selectedHolon.holon_type, { name: trimmed, dataType: 'text' });
+    setStatus(`Field ${trimmed} added`, 'success');
+    window.dispatchEvent(new CustomEvent('eB:modelChanged', { detail: { fieldAdded: trimmed } }));
+  }
+  catch (error)
+  {
+    setStatus(error.message || 'Unable to add field', 'error');
+  }
+}
+
+function addFieldControl(grid)
+{
+  if (!selectedHolon?.holon_type || grid.querySelector('.eb-add-dynamic-field')) return;
+  const rows = [...grid.querySelectorAll('tbody tr')];
+  const dynamicStart = rows.find(row => row.classList.contains('eb-dynamic-field-start'));
+  if (!dynamicStart) return;
+  const label = dynamicStart.querySelector('td');
+  if (!label) return;
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'eb-add-dynamic-field';
+  button.setAttribute('aria-label', 'Add dynamic field');
+  button.title = `Add field to ${selectedHolon.holon_type}`;
+  button.textContent = '+';
+  button.addEventListener('click', addDynamicField);
+  label.prepend(button);
+}
+
+function injectFieldControlStyles()
+{
+  if (document.getElementById('eb-add-dynamic-field-style')) return;
+  const style = document.createElement('style');
+  style.id = 'eb-add-dynamic-field-style';
+  style.textContent = `
+    .eb-add-dynamic-field {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      margin-right: 5px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+      opacity: .78;
+      vertical-align: -2px;
+    }
+    .eb-add-dynamic-field:hover { opacity: 1; }
+    .eb-add-dynamic-field:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
+  `;
+  document.head.appendChild(style);
+}
+
 function decorateInspector()
 {
   const grid = document.querySelector('#holonInspector .holon-property-grid');
   if (!grid || !selectedHolonId) return;
   hideLegacySchemaContent();
+  addFieldControl(grid);
   const keys = pendingTargets.get(String(selectedHolonId));
   if (!keys?.size) return;
 
@@ -188,13 +258,21 @@ async function render()
   catch (error) { list.className = 'eb-provenance-list'; list.textContent = error.message || 'Unable to load pending changes.'; }
 }
 
+function setStatus(text, level = 'info')
+{
+  try { window.eBStatus?.[level]?.(text); }
+  catch { }
+}
+
 export function initProvenance()
 {
   injectIndicatorStyles();
+  injectFieldControlStyles();
   watchInspector();
   window.addEventListener('holon:selected', event =>
   {
     selectedHolonId = event.detail?.id ? String(event.detail.id) : null;
+    selectedHolon = event.detail || null;
     requestAnimationFrame(decorateInspector);
   });
   render();
