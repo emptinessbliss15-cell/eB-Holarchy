@@ -1,4 +1,5 @@
 import { eBliss } from './eBSDK.js';
+import { eBStatus } from './eBStatus.js';
 
 let container = null;
 let inspectorObserver = null;
@@ -260,7 +261,7 @@ async function render()
 
 function setStatus(text, level = 'info')
 {
-  try { window.eBStatus?.[level]?.(text); }
+  try { eBStatus?.[level]?.(text); }
   catch { }
 }
 
