@@ -1,5 +1,6 @@
 import { eBliss } from './eBSDK.js';
 import { eBStatus } from './eBStatus.js';
+import { showModal } from './eBModal.js';
 
 let container = null;
 let inspectorObserver = null;
@@ -98,14 +99,34 @@ function hideLegacySchemaContent()
 async function addDynamicField()
 {
   if (!selectedHolon?.holon_type) return;
-  const name = window.prompt(`Add a field to ${selectedHolon.holon_type}`, 'test prov field');
-  if (name === null) return;
-  const trimmed = String(name).trim();
+  const typeOptions = [
+    { value: 'text', label: 'Text (string)' },
+    { value: 'number', label: 'Number' },
+    { value: 'integer', label: 'Integer' },
+    { value: 'boolean', label: 'Boolean' },
+    { value: 'date', label: 'Date' },
+    { value: 'datetime', label: 'Date & time' },
+    { value: 'time', label: 'Time' },
+    { value: 'json', label: 'JSON object' },
+    { value: 'array', label: 'Array' },
+    { value: 'uuid', label: 'UUID' },
+    { value: 'reference', label: 'Holon reference' },
+  ];
+  const values = await showModal({
+    title: `Add Field to ${selectedHolon.holon_type}`,
+    submitLabel: 'Add Field',
+    fields: [
+      { name: 'name', label: 'Field name', type: 'text', value: '', required: true, placeholder: 'Field name' },
+      { name: 'dataType', label: 'Value type', type: 'select', options: typeOptions, value: 'text' },
+    ],
+  });
+  if (!values) return;
+  const trimmed = String(values.name ?? '').trim();
   if (!trimmed) return;
   try
   {
     setStatus('Adding field…');
-    await eBliss.fieldDefinitions.create(selectedHolon.holon_type, { name: trimmed, dataType: 'text' });
+    await eBliss.fieldDefinitions.create(selectedHolon.holon_type, { name: trimmed, dataType: values.dataType || 'text' });
     setStatus(`Field ${trimmed} added`, 'success');
     window.dispatchEvent(new CustomEvent('eB:modelChanged', { detail: { fieldAdded: trimmed } }));
   }
