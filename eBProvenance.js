@@ -77,15 +77,33 @@ function injectIndicatorStyles()
   document.head.appendChild(style);
 }
 
+function hideLegacySchemaContent()
+{
+  const grid = document.querySelector('#holonInspector .holon-property-grid');
+  if (!grid) return;
+  const rows = [...grid.querySelectorAll('tbody tr')];
+  const dynamicStart = rows.findIndex(row => row.classList.contains('eb-dynamic-field-start'));
+  if (dynamicStart < 0) return;
+  const contentRow = rows.findIndex((row, index) =>
+  {
+    if (index >= dynamicStart) return false;
+    const label = row.querySelector('td');
+    return label?.textContent?.trim() === 'Content';
+  });
+  if (contentRow >= 0) rows[contentRow].hidden = true;
+}
+
 function decorateInspector()
 {
   const grid = document.querySelector('#holonInspector .holon-property-grid');
   if (!grid || !selectedHolonId) return;
+  hideLegacySchemaContent();
   const keys = pendingTargets.get(String(selectedHolonId));
   if (!keys?.size) return;
 
   grid.querySelectorAll('tbody tr').forEach(row =>
   {
+    if (row.hidden) return;
     const cells = row.querySelectorAll('td');
     if (cells.length < 2) return;
     const label = cells[0];
