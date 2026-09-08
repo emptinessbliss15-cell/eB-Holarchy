@@ -4,6 +4,7 @@ import { toggledOn } from './eBToggles.js';
 // Cytoscape is kept as the rendering primitive; the app owns the Holon model.
 
 let cy = null;
+let renderGeneration = 0;
 let currentModel = { holons: [], relationships: [], relationshipTypes: [] };
 let currentRootId = null;
 let currentDepth = 2;
@@ -18,6 +19,14 @@ let contextMenuCleanup = null;
 let hoverPreview = null;
 
 const GRAPH_DEPTH_STORAGE_KEY = 'eB-Holarchy.graphDepth';
+
+function setGraphBusy(busy) {
+    const graph = document.getElementById('holonGraph');
+    if (!graph) return;
+
+    graph.classList.toggle('is-busy', Boolean(busy));
+    graph.setAttribute('aria-busy', busy ? 'true' : 'false');
+}
 
 function readPersistedDepth() {
   try {
@@ -36,15 +45,66 @@ function installStyles() {
   const style = document.createElement('style');
   style.id = 'holon-graph-style';
   style.textContent = `
-    .holon-workspace { display: flex; flex-direction: column; min-height: 0; }
-    .holon-workspace .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
-    .graph-context { display: flex; align-items: center; gap: 7px; min-width: 240px; }
-    .graph-context label { font-size: 13px; font-weight: 600; }
-    .graph-context .hcg-autocomplete { flex: 1; min-width: 220px; }
-    .panel-actions { display: flex; flex-wrap: wrap; gap: 6px; }
-    .panel-actions button { padding: 6px 9px; border: 1px solid var(--eb-border-strong); border-radius: 5px; background: var(--eb-input-bg); color: var(--eb-text); }
+    .holon-workspace {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+    }
+    .holon-workspace .panel-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 8px;
+    }
+    .graph-context {
+        display: flex;
+        align-items: center;
+        gap: 7px; min-width: 240px; }
+    .graph-context label {
+        font-size: 13px;
+        font-weight: 600;
+    }
+    .graph-context .hcg-autocomplete {
+        flex: 1;
+        min-width: 220px;
+    }
+    .panel-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    .panel-actions button {
+        padding: 6px 9px;
+        border: 1px solid var(--eb-border-strong);
+        border-radius: 5px;
+        background: var(--eb-input-bg);
+        color: var(--eb-text);
+    }
     #graphUp { white-space: nowrap; }
-    #holonGraph { width: 100%; height: calc(100vh - 190px); min-height: 480px; border: 1px solid var(--eb-border); border-radius: 6px; background: var(--eb-bg); }
+    #holonGraph {
+        position: relative;
+        width: 100%; 
+        height: calc(100vh - 190px);
+        min-height: 480px;
+        border: 1px solid var(--eb-border);
+        border-radius: 6px;
+        background: var(--eb-bg);
+    }
+    #holonGraph.is-busy {
+        pointer-events: none;
+    }
+
+#holonGraph.is-busy::after {
+  content: "Loading Holarchy…";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--eb-bg);
+  color: var(--eb-text);
+  font-size: 13px;
+}
     .holon-status-legend { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 2px 0 8px; font-size: 11px; opacity: .9; }
     .holon-status-key { display: inline-flex; align-items: center; gap: 4px; }
     .holon-status-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; border: 1px solid rgba(0,0,0,.18); }
@@ -370,13 +430,29 @@ function installGraphInteractions() {
 }
 
 function render() {
-  if (!cy) return;
-  const model = visibleModel();
-  cy.elements().remove();
-  cy.add(buildElements(model.holons, model.relationships, model.relationshipTypes));
-  cy.layout({ name: 'cose', animate: false }).run();
-  syncFeatureToggles();
-  updateNavigationButton();
+    if (!cy) return;
+
+    const generation = ++renderGeneration;
+    setGraphBusy(true);
+
+    const model = visibleModel();
+
+    cy.elements().remove();
+    cy.add(buildElements(model.holons, model.relationships, model.relationshipTypes));
+
+    cy.one('layoutstop', () => {
+        if (generation === renderGeneration) {
+            setGraphBusy(false);
+        }
+    });
+
+    cy.layout({
+        name: 'cose',
+        animate: false
+    }).run();
+
+    syncFeatureToggles();
+    updateNavigationButton();
 }
 
 export function createHolonGraph({ element, holons = [], relationships = [], relationshipTypes = [], onSelect } = {}) {
@@ -407,11 +483,14 @@ export function updateHolonGraph({ holons = [], relationships = [], relationship
 }
 
 export function destroyHolonGraph() {
-  contextMenuCleanup?.();
-  contextMenuCleanup = null;
-  hideHoverPreview();
-  if (cy) cy.destroy();
-  cy = null;
+    renderGeneration += 1;
+    setGraphBusy(false);
+
+    contextMenuCleanup?.();
+    contextMenuCleanup = null;
+    hideHoverPreview();
+    if (cy) cy.destroy();
+    cy = null;
 }
 
 export function setGraphRoot(rootId) {
