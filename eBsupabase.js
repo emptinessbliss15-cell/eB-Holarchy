@@ -15,6 +15,16 @@ export function createEBSupabase()
   async function resolveHolonValues(values)
   {
     const normalized = { ...values };
+
+    // The database column is deliberately named `Content` (capital C).
+    // Keep the SDK boundary tolerant of callers that supply `content`.
+    const contentKey = Object.keys(normalized).find(key => key.toLowerCase() === 'content');
+    if (contentKey && contentKey !== 'Content')
+    {
+      normalized.Content = normalized[contentKey];
+      delete normalized[contentKey];
+    }
+
     if (normalized.holon_type !== undefined)
     {
       const typeName = String(normalized.holon_type).trim();
@@ -131,7 +141,7 @@ export function createEBSupabase()
     if (change.entity === 'holon')
     {
       if (change.operation === 'create') targetId = (await rawCreateHolon(change.values)).id;
-      else if (change.operation === 'update') { await rawUpdateHolon(targetId, change.values); }
+      else if (change.operation === 'update') await rawUpdateHolon(targetId, change.values);
       else if (change.operation === 'delete') { await rawDeleteHolon(targetId); targetId = null; }
     }
     else if (change.entity === 'relationship')
