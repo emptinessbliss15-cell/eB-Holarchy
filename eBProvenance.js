@@ -1,6 +1,8 @@
 import { eBliss } from './eBSDK.js';
 
 let container = null;
+let inspectorObserver = null;
+let pendingTargets = new Map();
 
 function escapeHtml(value)
 {
@@ -11,6 +13,116 @@ function prettyChanges(value)
 {
   try { return JSON.stringify(typeof value === 'string' ? JSON.parse(value) : value, null, 2); }
   catch { return String(value ?? ''); }
+}
+
+function parseChange(value)
+{
+  try { return typeof value === 'string' ? JSON.parse(value) : value; }
+  catch { return null; }
+}
+
+async function refreshPendingTargets()
+{
+  try
+  {
+    const changes = await eBliss.changes.list('pending');
+    pendingTargets = new Map();
+    changes.forEach(change =>
+    {
+      const provenance = change.provenance || {};
+      const details = parseChange(provenance.changes);
+      const targetId = details?.targetId;
+      if (!targetId || details?.entity !== 'holon') return;
+      const keys = details?.operation === 'update' ? Object.keys(details.values || {}) : ['*'];
+      const existing = pendingTargets.get(String(targetId)) || new Set();
+      keys.forEach(key => existing.add(String(key).toLowerCase()));
+      pendingTargets.set(String(targetId), existing);
+    });
+  }
+  catch
+  {
+    pendingTargets = new Map();
+  }
+}
+
+function injectIndicatorStyles()
+{
+  if (document.getElementById('eb-provenance-indicator-style')) return;
+  const style = document.createElement('style');
+  style.id = 'eb-provenance-indicator-style';
+  style.textContent = `
+    .eb-provenance-indicator {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      margin-right: 5px;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      font-size: 13px;
+      line-height: 1;
+      vertical-align: -1px;
+      opacity: .78;
+      cursor: pointer;
+    }
+    .eb-provenance-indicator:hover { opacity: 1; }
+    .eb-provenance-indicator:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
+  `;
+  document.head.appendChild(style);
+}
+
+function inspectorTargetId()
+{
+  const title = document.querySelector('.holon-inspector-title');
+  if (!title) return null;
+  const selectedName = title.textContent?.trim();
+  if (!selectedName) return null;
+  const cards = document.querySelectorAll('#holonInspector .holon-property-grid');
+  return window.__eBHolarchySelectedHolonId || null;
+}
+
+function decorateInspector()
+{
+  const grid = document.querySelector('#holonInspector .holon-property-grid');
+  if (!grid) return;
+  const targetId = inspectorTargetId();
+  if (!targetId) return;
+  const keys = pendingTargets.get(String(targetId));
+  if (!keys?.size) return;
+
+  grid.querySelectorAll('tbody tr').forEach(row =>
+  {
+    const cells = row.querySelectorAll('td');
+    if (cells.length < 2) return;
+    const label = cells[0];
+    const text = label.textContent?.trim() || '';
+    if (!text || label.querySelector('.eb-provenance-indicator')) return;
+    const key = text.toLowerCase().replace(/\s+/g, '_');
+    if (!keys.has('*') && !keys.has(key) && !keys.has(text.toLowerCase())) return;
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'eb-provenance-indicator';
+    button.setAttribute('aria-label', `Pending provenance change for ${text}`);
+    button.title = 'Pending change — provenance';
+    button.textContent = 'ⓘ';
+    label.prepend(button);
+  });
+}
+
+function watchInspector()
+{
+  const target = document.getElementById('holonInspectorContent');
+  if (!target) return;
+  inspectorObserver?.disconnect();
+  inspectorObserver = new MutationObserver(() => requestAnimationFrame(decorateInspector));
+  inspectorObserver.observe(target, { childList: true, subtree: true });
+  requestAnimationFrame(decorateInspector);
 }
 
 function ensureContainer()
@@ -37,6 +149,8 @@ async function render()
     {
       list.className = 'eb-provenance-list muted';
       list.textContent = 'No pending changes.';
+      await refreshPendingTargets();
+      decorateInspector();
       return;
     }
     list.className = 'eb-provenance-list';
@@ -61,12 +175,16 @@ async function render()
       });
       list.appendChild(card);
     });
+    await refreshPendingTargets();
+    decorateInspector();
   }
   catch (error) { list.className = 'eb-provenance-list'; list.textContent = error.message || 'Unable to load pending changes.'; }
 }
 
 export function initProvenance()
 {
+  injectIndicatorStyles();
+  watchInspector();
   render();
   window.addEventListener('eB:provenanceCreated', render);
   window.addEventListener('eB:modelChanged', render);
@@ -74,7 +192,4 @@ export function initProvenance()
 
 initProvenance();
 
-// The filter is a graph concern, but this module is loaded after the graph
-// has been created. Initialize it here so the filter remains a single,
-// persistent component without changing the application bootstrap order.
 import('./eBHolarchyFilter.js').then(({ initHolarchyFilter }) => initHolarchyFilter());
