@@ -9,7 +9,9 @@ export function createEBlissSDK(backend)
     model: backend.model,
     holons: backend.holons,
     holonTypes: backend.holonTypes,
+    relationshipTypes: backend.relationshipTypes,
     relationships: backend.relationships,
+    changes: backend.changes,
     profile: backend.profile,
     toggles: backend.toggles,
   });
