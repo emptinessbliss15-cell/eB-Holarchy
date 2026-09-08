@@ -3,6 +3,7 @@ import { eBliss } from './eBSDK.js';
 let container = null;
 let inspectorObserver = null;
 let pendingTargets = new Map();
+let selectedHolonId = null;
 
 function escapeHtml(value)
 {
@@ -76,23 +77,11 @@ function injectIndicatorStyles()
   document.head.appendChild(style);
 }
 
-function inspectorTargetId()
-{
-  const title = document.querySelector('.holon-inspector-title');
-  if (!title) return null;
-  const selectedName = title.textContent?.trim();
-  if (!selectedName) return null;
-  const cards = document.querySelectorAll('#holonInspector .holon-property-grid');
-  return window.__eBHolarchySelectedHolonId || null;
-}
-
 function decorateInspector()
 {
   const grid = document.querySelector('#holonInspector .holon-property-grid');
-  if (!grid) return;
-  const targetId = inspectorTargetId();
-  if (!targetId) return;
-  const keys = pendingTargets.get(String(targetId));
+  if (!grid || !selectedHolonId) return;
+  const keys = pendingTargets.get(String(selectedHolonId));
   if (!keys?.size) return;
 
   grid.querySelectorAll('tbody tr').forEach(row =>
@@ -185,6 +174,11 @@ export function initProvenance()
 {
   injectIndicatorStyles();
   watchInspector();
+  window.addEventListener('holon:selected', event =>
+  {
+    selectedHolonId = event.detail?.id ? String(event.detail.id) : null;
+    requestAnimationFrame(decorateInspector);
+  });
   render();
   window.addEventListener('eB:provenanceCreated', render);
   window.addEventListener('eB:modelChanged', render);
