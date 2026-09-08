@@ -116,5 +116,7 @@ button { cursor: pointer; }
   .hcg-autocomplete-option { cursor: pointer; }
   .hcg-autocomplete-option.is-selected { cursor: default; opacity: .65; }
   .hcg-autocomplete-option.is-disabled { cursor: not-allowed; }
+  .holarchy-filter #graphDepth { color-scheme: dark; background: var(--eb-input-bg); color: var(--eb-text); }
+  .holarchy-filter #graphDepth option { background: var(--eb-input-bg); color: var(--eb-text); }
 }
 @media (max-width: 760px) { .eb-header-inner { grid-template-columns: auto 1fr; justify-items: start; } .eb-brand, .eb-app-name, .eb-row { grid-column: 2; } .eb-app-name { text-align: left; } .eb-row { justify-content: flex-start; } .eb-status { grid-template-columns: 1fr; } .eb-navigation { grid-template-columns: 1fr; } .eb-tree { border-right: 0; border-bottom: 1px solid var(--eb-border); max-height: 35vh; } .workspace-grid { grid-template-columns: 1fr; } .panel-actions { margin-left: auto; } }
