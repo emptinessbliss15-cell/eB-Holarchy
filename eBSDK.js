@@ -11,6 +11,7 @@ export function createEBlissSDK(backend)
     holonTypes: backend.holonTypes,
     relationshipTypes: backend.relationshipTypes,
     relationships: backend.relationships,
+    fieldDefinitions: backend.fieldDefinitions,
     changes: backend.changes,
     profile: backend.profile,
     toggles: backend.toggles,
