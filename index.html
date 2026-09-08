@@ -48,6 +48,14 @@
         .eb-feature-toggle input { margin: 0; }
         .eb-auth-avatar { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; display: block; }
         .holon-status-legend { position: absolute; z-index: 2; top: 58px; left: 12px; margin: 0; padding: 5px 8px; border: 1px solid var(--eb-border); border-radius: 6px; background: color-mix(in srgb, var(--eb-bg) 88%, transparent); backdrop-filter: blur(3px); }
+        .eb-provenance-panel { margin-bottom: 12px; }
+        .eb-provenance-list { display: grid; gap: 8px; padding: 10px 14px 14px; }
+        .eb-provenance-item { border: 1px solid var(--eb-border); border-radius: 7px; padding: 10px; background: var(--eb-input-bg); }
+        .eb-provenance-title { font-weight: 700; }
+        .eb-provenance-meta { font-size: 11px; opacity: .7; margin-top: 3px; }
+        .eb-provenance-changes { max-height: 180px; overflow: auto; margin: 8px 0; padding: 8px; font-size: 11px; white-space: pre-wrap; background: var(--eb-bg); border-radius: 4px; }
+        .eb-provenance-actions { display: flex; gap: 8px; }
+        .eb-provenance-actions button { padding: 6px 10px; border: 1px solid var(--eb-border-strong); border-radius: 5px; background: var(--eb-input-bg); color: var(--eb-text); cursor: pointer; }
         @media (max-width: 760px) {
             .workspace-primary { grid-template-columns: 1fr; }
             .holarchy-heading { align-items: stretch; }
@@ -86,6 +94,7 @@
         await import('./relationshipInspector.js');
         await import('./eBProfiles.js').then(({ initProfiles }) => initProfiles());
         await import('./eBToggles.js').then(({ initToggles }) => initToggles());
+        await import('./eBProvenance.js').then(({ initProvenance }) => initProvenance());
         window.dispatchEvent(new CustomEvent('features:loaded'));
     </script>
 </body>
