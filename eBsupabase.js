@@ -126,6 +126,27 @@ export function createEBSupabase()
     return approved;
   }
 
+  async function createFieldDefinition(typeName, values = {})
+  {
+    const name = String(values.name ?? '').trim();
+    if (!name) throw new Error('Field name is required');
+    const type = result('Holon type', await supabase.from('holon_types').select('id').eq('name', typeName).single());
+    const fieldType = result('Holon Field type', await supabase.from('holon_types').select('id').eq('name', 'Holon Field').single());
+    const fieldOf = result('field of relationship type', await supabase.from('relationship_types').select('id').eq('name', 'field of').single());
+    const existingLink = result('Field lookup', await supabase.from('relationships').select('source_holon_id').eq('relationship_type_id', fieldOf.id).eq('target_holon_id', type.id));
+    const existingIds = (existingLink || []).map(row => row.source_holon_id);
+    if (existingIds.length)
+    {
+      const existing = result('Field definition lookup', await supabase.from('holons').select('id,name').eq('holon_type_id', fieldType.id).in('id', existingIds));
+      if ((existing || []).some(field => String(field.name).trim().toLowerCase() === name.toLowerCase())) throw new Error(`Field "${name}" already exists on ${typeName}`);
+    }
+    const meta = { dataType: String(values.dataType || 'text').toLowerCase(), required: values.required === true, defaultValue: values.defaultValue ?? '', order: Number(values.order ?? 0) };
+    const field = await rawCreateHolon({ holon_type: 'Holon Field', name, Content: JSON.stringify(meta) });
+    const relationship = await rawCreateRelationship({ source_holon_id: field.id, relationship_type_id: fieldOf.id, target_holon_id: type.id });
+    emitChange('eB:modelChanged', { fieldId: field.id, holonTypeId: type.id, relationshipId: relationship.id });
+    return field;
+  }
+
   return {
     auth: { getSession() { return supabase.auth.getSession(); }, onAuthStateChange(callback) { return supabase.auth.onAuthStateChange(callback); }, signIn(email, password) { return supabase.auth.signInWithPassword({ email, password }); }, signUp(email, password) { return supabase.auth.signUp({ email, password }); }, signOut() { return supabase.auth.signOut({ scope: 'local' }); } },
     profile: { async get(userId) { return result('Profile', await supabase.from('profiles').select('*').eq('id', userId).maybeSingle()); }, async upsert(userId, values) { return result('Profile', await supabase.from('profiles').upsert({ id: userId, ...values }, { onConflict: 'id' }).select().single()); } },
@@ -135,6 +156,7 @@ export function createEBSupabase()
     holonTypes: { async create(values) { const name = String(values?.name ?? '').trim(); if (!name) throw new Error('Holon type name is required'); const description = String(values?.description ?? '').trim(); return result('Holon type', await supabase.from('holon_types').insert({ name, description }).select().single()); } },
     relationshipTypes: { async create(values) { const name = String(values?.name ?? '').trim(); if (!name) throw new Error('Relationship type name is required'); const description = String(values?.description ?? '').trim(); return result('Relationship type', await supabase.from('relationship_types').insert({ name, description }).select().single()); } },
     relationships: { async create(values) { return createProvenance('create', JSON.stringify({ entity: 'relationship', operation: 'create', values })); }, async get(relationshipId) { return result('Relationship', await supabase.from('relationships_view').select('*').eq('id', relationshipId).single()); }, async update(relationshipId, values) { return createProvenance('update', JSON.stringify({ entity: 'relationship', operation: 'update', targetId: relationshipId, values }), null); }, async delete(relationshipId) { return createProvenance('delete', JSON.stringify({ entity: 'relationship', operation: 'delete', targetId: relationshipId })); }, },
+    fieldDefinitions: { create(typeName, values) { return createFieldDefinition(typeName, values); } },
     changes: { async list(status = 'pending') { const typeId = await provenanceTypeId(); const rows = result('Changes', await supabase.from('holons_view').select('*').eq('holon_type_id', typeId).order('created_at', { ascending: false })); const fields = await provenanceFields(); return (rows || []).map(row => { let parsed = {}; try { parsed = JSON.parse(String(row.Content || '{}')); } catch { } const dynamic = parsed[DYNAMIC_FIELDS_KEY] || {}; const item = { ...row, provenance: Object.fromEntries(Object.entries(fields).map(([name, id]) => [name, dynamic[String(id)]])) }; return !status || item.provenance.status === status ? item : null; }).filter(Boolean); }, approve(provenanceId, reason = '') { return applyChange(provenanceId, 'approve', reason); }, reject(provenanceId, reason = '') { return applyChange(provenanceId, 'reject', reason); }, get: readProvenance }
   };
 }
