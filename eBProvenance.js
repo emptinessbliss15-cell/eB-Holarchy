@@ -73,3 +73,8 @@ export function initProvenance()
 }
 
 initProvenance();
+
+// The filter is a graph concern, but this module is loaded after the graph
+// has been created. Initialize it here so the filter remains a single,
+// persistent component without changing the application bootstrap order.
+import('./eBHolarchyFilter.js').then(({ initHolarchyFilter }) => initHolarchyFilter());
