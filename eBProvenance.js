@@ -236,6 +236,14 @@ function ensureContainer()
   return container;
 }
 
+function setActionBusy(card, action, busy)
+{
+  const buttons = card.querySelectorAll('.eb-provenance-actions button');
+  buttons.forEach(button => { button.disabled = busy; });
+  if (!action) return;
+  action.textContent = busy ? (action.dataset.busyLabel || `${action.textContent}…`) : (action.dataset.defaultLabel || action.textContent);
+}
+
 async function render()
 {
   const root = ensureContainer();
@@ -260,17 +268,23 @@ async function render()
       card.className = 'eb-provenance-item';
       const p = change.provenance || {};
       card.innerHTML = `<div class="eb-provenance-title">${escapeHtml(change.name || 'Pending change')}</div><div class="eb-provenance-meta">${escapeHtml(p.timestamp || change.created_at || '')} · ${escapeHtml(p.actor || '')}</div><pre class="eb-provenance-changes">${escapeHtml(prettyChanges(p.changes))}</pre><div class="eb-provenance-actions"><button type="button" data-action="approve">Approve</button><button type="button" data-action="reject">Reject</button></div>`;
-      card.querySelector('[data-action="approve"]').addEventListener('click', async () =>
+      const approveButton = card.querySelector('[data-action="approve"]');
+      const rejectButton = card.querySelector('[data-action="reject"]');
+      approveButton.dataset.defaultLabel = 'Approve';
+      approveButton.dataset.busyLabel = '⟳ Approving…';
+      rejectButton.dataset.defaultLabel = 'Reject';
+      rejectButton.dataset.busyLabel = '⟳ Rejecting…';
+      approveButton.addEventListener('click', async () =>
       {
-        card.querySelectorAll('button').forEach(button => { button.disabled = true; });
+        setActionBusy(card, approveButton, true);
         try { await eBliss.changes.approve(change.id); window.location.reload(); }
-        catch (error) { card.querySelectorAll('button').forEach(button => { button.disabled = false; }); alert(error.message || 'Unable to approve change'); }
+        catch (error) { setActionBusy(card, approveButton, false); alert(error.message || 'Unable to approve change'); }
       });
-      card.querySelector('[data-action="reject"]').addEventListener('click', async () =>
+      rejectButton.addEventListener('click', async () =>
       {
-        card.querySelectorAll('button').forEach(button => { button.disabled = true; });
+        setActionBusy(card, rejectButton, true);
         try { await eBliss.changes.reject(change.id); await render(); }
-        catch (error) { card.querySelectorAll('button').forEach(button => { button.disabled = false; }); alert(error.message || 'Unable to reject change'); }
+        catch (error) { setActionBusy(card, rejectButton, false); alert(error.message || 'Unable to reject change'); }
       });
       list.appendChild(card);
     });
