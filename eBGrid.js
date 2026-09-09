@@ -134,6 +134,7 @@ export class eBGrid {
     }
 
     input.addEventListener('change', () => {
+      debugger;
       if (isCheckbox) commit(input.checked);
     });
 
