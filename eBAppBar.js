@@ -45,21 +45,20 @@ function discoverViews(model)
   const { holons = [], relationships = [], relationshipTypes = [] } = model || {};
   const application = holons.find(holon =>
     String(holon.name || '').trim().toLowerCase() === APP_NAME.toLowerCase()
-    && String(holon.holon_type || '').trim().toLowerCase() === 'application');
+    && String(holon.holon_type || '').trim().toLowerCase() === 'app');
 
   if (!application) return [];
 
   const links = relationships.filter(relationship =>
   {
-    if (String(relationship.source_holon_id) !== String(application.id)) return false;
-    const name = relationshipName(relationship, relationshipTypes).trim().toLowerCase();
-    return name === 'contains' || name === 'has view' || name === 'app view';
+    if (String(relationship.target_holon_id) !== String(application.id)) return false;
+    return relationshipName(relationship, relationshipTypes).trim().toLowerCase() === 'component of';
   });
 
   return links.map(link =>
   {
-    const holon = holons.find(item => String(item.id) === String(link.target_holon_id));
-    if (!holon) return null;
+    const holon = holons.find(item => String(item.id) === String(link.source_holon_id));
+    if (!holon || String(holon.holon_type || '').trim().toLowerCase() !== 'component') return null;
     const config = parseContent(holon.Content);
     return {
       holonId: holon.id,
