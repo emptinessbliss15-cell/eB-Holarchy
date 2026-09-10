@@ -7,8 +7,11 @@ const GRAPH_ROOT_STORAGE_KEY = 'eB-Holarchy.graphRoot';
 const GRAPH_FIT_PADDING = 56;
 const GRAPH_MIN_AUTO_ZOOM = 0.45;
 const GRAPH_MAX_AUTO_ZOOM = 1.25;
+const GRAPH_ATTACH_RETRY_MS = 50;
+const GRAPH_ATTACH_MAX_ATTEMPTS = 100;
 let filter = null;
 let graphListenersInstalledFor = null;
+let graphAttachTimer = null;
 
 function persistGraphRoot(rootId)
 {
@@ -47,7 +50,7 @@ function fitGraph(cy)
 function installGraphListeners()
 {
   const cy = getHolonGraph();
-  if (!cy || graphListenersInstalledFor === cy) return false;
+  if (!cy || graphListenersInstalledFor === cy) return Boolean(cy);
 
   // Cytoscape normally emits tap for clicks, but keep an explicit click path
   // so node selection remains reliable across the graph/render lifecycle.
@@ -72,6 +75,23 @@ function installGraphListeners()
 
   graphListenersInstalledFor = cy;
   return true;
+}
+
+function attachGraphListeners(attempt = 0)
+{
+  if (installGraphListeners())
+  {
+    if (graphAttachTimer) clearTimeout(graphAttachTimer);
+    graphAttachTimer = null;
+    return;
+  }
+
+  if (attempt >= GRAPH_ATTACH_MAX_ATTEMPTS || graphAttachTimer) return;
+  graphAttachTimer = setTimeout(() =>
+  {
+    graphAttachTimer = null;
+    attachGraphListeners(attempt + 1);
+  }, GRAPH_ATTACH_RETRY_MS);
 }
 
 function installControls()
@@ -114,13 +134,13 @@ function installControls()
 export function initHolarchyFilter()
 {
   const installedFilter = installControls();
-  installGraphListeners();
+  attachGraphListeners();
   return installedFilter;
 }
 
 export function refreshHolarchyFilter()
 {
-  installGraphListeners();
+  attachGraphListeners();
   return filter;
 }
 
