@@ -7,8 +7,8 @@ const GRAPH_ROOT_STORAGE_KEY = 'eB-Holarchy.graphRoot';
 const GRAPH_FIT_PADDING = 56;
 const GRAPH_MIN_AUTO_ZOOM = 0.45;
 const GRAPH_MAX_AUTO_ZOOM = 1.25;
-let installed = false;
 let filter = null;
+let graphListenersInstalledFor = null;
 
 function persistGraphRoot(rootId)
 {
@@ -44,13 +44,44 @@ function fitGraph(cy)
   }
 }
 
-function install()
+function installGraphListeners()
 {
-  if (installed) return;
+  const cy = getHolonGraph();
+  if (!cy || graphListenersInstalledFor === cy) return false;
+
+  // Cytoscape normally emits tap for clicks, but keep an explicit click path
+  // so node selection remains reliable across the graph/render lifecycle.
+  cy.on('click', 'node', event =>
+  {
+    const node = event.target;
+    node.select();
+    node.trigger('tap');
+  });
+
+  // Graph navigation changes root inside holonGraph.js. Persist that same
+  // Holon ID so an app refresh restores the root selected by double-click.
+  cy.on('dbltap', 'node', event =>
+  {
+    persistGraphRoot(event.target.data('holonId'));
+  });
+
+  // Every root/depth/model render runs a Cytoscape layout. Fit the resulting
+  // graph to the available viewport, but keep tiny graphs from becoming huge
+  // and large graphs from shrinking beyond a useful working scale.
+  cy.on('layoutstop', () => fitGraph(cy));
+
+  graphListenersInstalledFor = cy;
+  return true;
+}
+
+function installControls()
+{
+  if (filter) return filter;
+
   const root = document.querySelector('.holarchy-filter');
   const depth = document.getElementById('graphDepth');
   const provenance = document.getElementById('graphProvenance');
-  if (!root || !depth || !provenance) return;
+  if (!root || !depth || !provenance) return null;
 
   filter = createEBFilter(root, {
     storageKey: FILTER_STORAGE_KEY,
@@ -77,35 +108,20 @@ function install()
     },
   });
 
-  // Cytoscape normally emits tap for clicks, but keep an explicit click path
-  // so node selection remains reliable across the graph/render lifecycle.
-  const cy = getHolonGraph();
-  cy?.on('click', 'node', event =>
-  {
-    const node = event.target;
-    node.select();
-    node.trigger('tap');
-  });
-
-  // Graph navigation changes root inside holonGraph.js. Persist that same
-  // Holon ID so an app refresh restores the root selected by double-click.
-  cy?.on('dbltap', 'node', event =>
-  {
-    persistGraphRoot(event.target.data('holonId'));
-  });
-
-  // Every root/depth/model render runs a Cytoscape layout. Fit the resulting
-  // graph to the available viewport, but keep tiny graphs from becoming huge
-  // and large graphs from shrinking beyond a useful working scale.
-  cy?.on('layoutstop', () => fitGraph(cy));
-
-  installed = true;
+  return filter;
 }
 
 export function initHolarchyFilter()
 {
-  install();
+  const installedFilter = installControls();
+  installGraphListeners();
+  return installedFilter;
+}
+
+export function refreshHolarchyFilter()
+{
+  installGraphListeners();
   return filter;
 }
 
-install();
+initHolarchyFilter();
