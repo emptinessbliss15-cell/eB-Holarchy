@@ -7,7 +7,7 @@ import { loadHolons } from './holons.js';
 import { eBStatus } from './eBStatus.js';
 import { createHolonGraph, updateHolonGraph, destroyHolonGraph, setGraphRoot, setGraphDepth } from './holonGraph.js';
 import { createEBComboBox, holonComboOptions } from './eBComboBox.js';
-import { createEBGrid } from './eBGrid.js';
+import { createEBProps } from './eBProps.js';
 import { showModal } from './eBModal.js';
 
 const status = eBStatus;
@@ -127,21 +127,71 @@ async function saveInspectorProperty(holon, key, value) {
 function injectInspectorStyles() { if (document.getElementById('eb-inspector-field-boundary-style')) return; const style = document.createElement('style'); style.id = 'eb-inspector-field-boundary-style'; style.textContent = '.holon-property-grid tr.eb-dynamic-field-start td { border-top: 1px solid currentColor; }'; document.head.appendChild(style); }
 function markDynamicFieldBoundary(gridElement, schemaRowCount) { if (!schemaRowCount) return; requestAnimationFrame(() => { const rows = gridElement.querySelectorAll('tbody tr'); rows[schemaRowCount]?.classList.add('eb-dynamic-field-start'); }); }
 
-function renderHolonInspector(holon) {
+function renderHolonInspector(holon)
+{
   if (!elements.inspectorContent) return;
-  propertyGrid?.destroy?.(); propertyGrid = null; elements.inspectorContent.replaceChildren();
-  if (!holon) { const empty = document.createElement('div'); empty.className = 'muted'; empty.textContent = 'Select a Holon to inspect its properties.'; elements.inspectorContent.appendChild(empty); return; }
-  selectedHolon = holon; selectedRelationship = null;
-  const title = document.createElement('div'); title.className = 'holon-inspector-title'; title.textContent = holon.name || '(unnamed Holon)'; elements.inspectorContent.appendChild(title);
-  const actions = document.createElement('div'); actions.className = 'holon-inspector-actions'; const editButton = document.createElement('button'); editButton.type = 'button'; editButton.textContent = 'Edit Holon'; editButton.addEventListener('click', () => editHolon(holon)); actions.appendChild(editButton); elements.inspectorContent.appendChild(actions);
-  const dynamicFields = dynamicFieldDefinitions(holon.holon_type); const decoded = decodeDynamicContent(holon.Content);
-  const schemaRows = Object.entries(holon).filter(([key]) => key !== 'children' && key !== 'Content').map(([key, value]) => ({ key, property: labelForKey(key), value: propertyValueForDisplay(key, value) }));
+  propertyGrid?.destroy?.();
+  propertyGrid = null;
+
+  if (!holon)
+  {
+    elements.inspectorContent.replaceChildren();
+    const empty = document.createElement('div');
+    empty.className = 'muted';
+    empty.textContent = 'Select a Holon to inspect its properties.';
+    elements.inspectorContent.appendChild(empty);
+    return;
+  }
+
+  selectedHolon = holon;
+  selectedRelationship = null;
+
+  const dynamicFields = dynamicFieldDefinitions(holon.holon_type);
+  const decoded = decodeDynamicContent(holon.Content);
+  const schemaRows = Object.entries(holon)
+    .filter(([key]) => key !== 'children' && key !== 'Content')
+    .map(([key, value]) => ({ key, property: labelForKey(key), value: propertyValueForDisplay(key, value) }));
   schemaRows.push({ key: 'Content', property: 'Content', value: decoded.legacyContent || '—' });
-  const dynamicRows = dynamicFields.map(field => ({ key: `field:${field.id}`, property: field.name, value: formatPropertyValue(decoded.fields[String(field.id)] ?? field.defaultValue) }));
+  const dynamicRows = dynamicFields.map(field => ({
+    key: `field:${field.id}`,
+    property: field.name,
+    value: formatPropertyValue(decoded.fields[String(field.id)] ?? field.defaultValue),
+  }));
   const rows = [...schemaRows, ...dynamicRows];
-  const gridElement = document.createElement('div'); gridElement.className = 'holon-property-grid'; gridElement.setAttribute('aria-label', `${holon.name || 'Holon'} properties`); elements.inspectorContent.appendChild(gridElement);
-  propertyGrid = createEBGrid(gridElement, { data: rows, columns: [{ key: 'property', label: 'Property', sortable: true }, { key: 'value', label: 'Value', sortable: true, editor: row => { if (row.key === 'holon_type') return { type: 'combobox', options: holonTypeOptions(holon.holon_type), value: holon.holon_type, minChars: 0, allowCustom: false }; if (row.key.startsWith('field:')) { const field = dynamicFields.find(item => String(item.id) === row.key.slice('field:'.length)); if (field) return dynamicFieldEditor(field, decoded.fields[String(field.id)] ?? field.defaultValue); } if (row.key === 'Content') return { type: 'textarea', rows: 6 }; if (row.key === 'id' || row.key === 'created_at') return null; return { type: 'text' }; } }], pageSize: Math.max(rows.length, 10), pagination: false, filterable: false, sortable: true, resizableColumns: true, editableRows: true, keyboardNavigation: true, contextMenu: false, onRowEdit: (row, field, newValue) => { if (field !== 'value') return; const key = row.key; if (key.startsWith('field:')) { void saveInspectorProperty(holon, key, newValue); return; } const rawValue = String(newValue ?? ''); const originalValue = propertyValueForDisplay(key, key === 'Content' ? decoded.legacyContent : holon[key]); if (rawValue === originalValue) return; void saveInspectorProperty(holon, key, rawValue); } });
-  markDynamicFieldBoundary(gridElement, schemaRows.length);
+
+  propertyGrid = createEBProps(elements.inspectorContent, {
+    title: holon.name || '(unnamed Holon)',
+    rows,
+    ariaLabel: `${holon.name || 'Holon'} properties`,
+    actions: [{ label: 'Edit Holon', onClick: () => editHolon(holon) }],
+    editor: row =>
+    {
+      if (row.key === 'holon_type') return { type: 'combobox', options: holonTypeOptions(holon.holon_type), value: holon.holon_type, minChars: 0, allowCustom: false };
+      if (row.key.startsWith('field:'))
+      {
+        const field = dynamicFields.find(item => String(item.id) === row.key.slice('field:'.length));
+        if (field) return dynamicFieldEditor(field, decoded.fields[String(field.id)] ?? field.defaultValue);
+      }
+      if (row.key === 'Content') return { type: 'textarea', rows: 6 };
+      if (row.key === 'id' || row.key === 'created_at') return null;
+      return { type: 'text' };
+    },
+    onChange: (row, newValue) =>
+    {
+      const key = row.key;
+      if (key.startsWith('field:'))
+      {
+        void saveInspectorProperty(holon, key, newValue);
+        return;
+      }
+      const rawValue = String(newValue ?? '');
+      const originalValue = propertyValueForDisplay(key, key === 'Content' ? decoded.legacyContent : holon[key]);
+      if (rawValue === originalValue) return;
+      void saveInspectorProperty(holon, key, rawValue);
+    },
+  });
+
+  markDynamicFieldBoundary(propertyGrid.element, schemaRows.length);
 }
 
 function relationshipEndpointName(id, fallback = '—') { if (!id) return fallback; return holons.find(item => String(item.id) === String(id))?.name || '(unnamed Holon)'; }
@@ -149,7 +199,58 @@ function relationshipTypeName(id, fallback = '—') { if (!id) return fallback; 
 function relationshipPropertyValue(key, value) { if (key === 'source_holon_id' || key === 'target_holon_id') return relationshipEndpointName(value); if (key === 'relationship_type_id') return relationshipTypeName(value); return formatPropertyValue(value); }
 function relationshipComboOptions(kind, selected = '') { const options = kind === 'relationship' ? relationshipTypes.map(type => ({ value: type.id, label: type.name || '(unnamed relationship)' })) : holons.filter(holon => String(holon.holon_type || '').toLowerCase() !== 'provenance').map(holon => ({ value: holon.id, label: holon.name || '(unnamed Holon)' })); if (selected && !options.some(option => String(option.value) === String(selected))) options.unshift({ value: selected, label: relationshipPropertyValue(kind === 'relationship' ? 'relationship_type_id' : `${kind}_holon_id`, selected) }); return options; }
 async function saveRelationshipProperty(relationship, key, value) { let nextValue = value; if (key === 'source_holon_id' || key === 'target_holon_id' || key === 'relationship_type_id') { nextValue = String(value ?? '').trim(); if (!nextValue) { setStatus(`${labelForKey(key)} is required`, 'warn'); renderRelationshipInspector(relationship); return; } const exists = key === 'relationship_type_id' ? relationshipTypes.some(type => String(type.id) === nextValue) : holons.some(holon => String(holon.id) === nextValue); if (!exists) { setStatus(`Unknown ${labelForKey(key)}`, 'warn'); renderRelationshipInspector(relationship); return; } } else if (key === 'position') { nextValue = Number(value); if (!Number.isInteger(nextValue)) { setStatus('Position must be a whole number', 'warn'); renderRelationshipInspector(relationship); return; } } if (String(nextValue) === String(relationship[key] ?? '')) return; setStatus(`Updating relationship ${labelForKey(key)}…`); try { await eBliss.relationships.update(relationship.id, { [key]: nextValue }); await loadModel(); const updated = relationships.find(item => String(item.id) === String(relationship.id)) || { ...relationship, [key]: nextValue }; selectedRelationship = updated; renderRelationshipInspector(updated); status.updated(labelForKey(key), relationshipPropertyValue(key, nextValue)); } catch (error) { setStatus(error.message || `Unable to update relationship ${labelForKey(key)}`, 'error'); renderRelationshipInspector(relationship); } }
-function renderRelationshipInspector(relationship) { if (!elements.inspectorContent) return; propertyGrid?.destroy?.(); propertyGrid = null; elements.inspectorContent.replaceChildren(); if (!relationship) { const empty = document.createElement('div'); empty.className = 'muted'; empty.textContent = 'Select a Holon or relationship to inspect its properties.'; elements.inspectorContent.appendChild(empty); return; } selectedRelationship = relationship; selectedHolon = null; const sourceName = relationshipEndpointName(relationship.source_holon_id, '(source)'); const targetName = relationshipEndpointName(relationship.target_holon_id, '(target)'); const relationshipName = relationshipTypeName(relationship.relationship_type_id, '(relationship)'); const title = document.createElement('div'); title.className = 'holon-inspector-title'; title.textContent = `${sourceName} — ${relationshipName} → ${targetName}`; elements.inspectorContent.appendChild(title); const rows = [{ key: 'id', property: 'Relationship ID', value: formatPropertyValue(relationship.id) }, { key: 'source_holon_id', property: 'Source Holon', value: sourceName }, { key: 'relationship_type_id', property: 'Relationship Type', value: relationshipName }, { key: 'target_holon_id', property: 'Target Holon', value: targetName }, { key: 'position', property: 'Position', value: formatPropertyValue(relationship.position) }]; const gridElement = document.createElement('div'); gridElement.className = 'holon-property-grid'; gridElement.setAttribute('aria-label', `${sourceName} to ${targetName} relationship properties`); elements.inspectorContent.appendChild(gridElement); propertyGrid = createEBGrid(gridElement, { data: rows, columns: [{ key: 'property', label: 'Property', sortable: true }, { key: 'value', label: 'Value', sortable: true, editor: row => { if (row.key === 'id') return null; if (row.key === 'source_holon_id') return { type: 'combobox', options: relationshipComboOptions('source', relationship.source_holon_id), value: relationship.source_holon_id, displayValue: sourceName, minChars: 0, allowCustom: false, clearable: false }; if (row.key === 'relationship_type_id') return { type: 'combobox', options: relationshipComboOptions('relationship', relationship.relationship_type_id), value: relationship.relationship_type_id, displayValue: relationshipName, minChars: 0, allowCustom: false, clearable: false }; if (row.key === 'target_holon_id') return { type: 'combobox', options: relationshipComboOptions('target', relationship.target_holon_id), value: relationship.target_holon_id, displayValue: targetName, minChars: 0, allowCustom: false, clearable: false }; if (row.key === 'position') return { type: 'input', inputType: 'number', step: 1 }; return null; } }], pageSize: rows.length, pagination: false, filterable: false, sortable: true, resizableColumns: true, editableRows: true, keyboardNavigation: true, contextMenu: false, onRowEdit: (row, field, newValue) => { if (field !== 'value' || row.key === 'id') return; void saveRelationshipProperty(relationship, row.key, newValue); } }); }
+
+function renderRelationshipInspector(relationship)
+{
+  if (!elements.inspectorContent) return;
+  propertyGrid?.destroy?.();
+  propertyGrid = null;
+
+  if (!relationship)
+  {
+    elements.inspectorContent.replaceChildren();
+    const empty = document.createElement('div');
+    empty.className = 'muted';
+    empty.textContent = 'Select a Holon or relationship to inspect its properties.';
+    elements.inspectorContent.appendChild(empty);
+    return;
+  }
+
+  selectedRelationship = relationship;
+  selectedHolon = null;
+
+  const sourceName = relationshipEndpointName(relationship.source_holon_id, '(source)');
+  const targetName = relationshipEndpointName(relationship.target_holon_id, '(target)');
+  const relationshipName = relationshipTypeName(relationship.relationship_type_id, '(relationship)');
+  const rows = [
+    { key: 'id', property: 'Relationship ID', value: formatPropertyValue(relationship.id) },
+    { key: 'source_holon_id', property: 'Source Holon', value: sourceName },
+    { key: 'relationship_type_id', property: 'Relationship Type', value: relationshipName },
+    { key: 'target_holon_id', property: 'Target Holon', value: targetName },
+    { key: 'position', property: 'Position', value: formatPropertyValue(relationship.position) },
+  ];
+
+  propertyGrid = createEBProps(elements.inspectorContent, {
+    title: `${sourceName} — ${relationshipName} → ${targetName}`,
+    rows,
+    ariaLabel: `${sourceName} to ${targetName} relationship properties`,
+    pageSize: rows.length,
+    editor: row =>
+    {
+      if (row.key === 'id') return null;
+      if (row.key === 'source_holon_id') return { type: 'combobox', options: relationshipComboOptions('source', relationship.source_holon_id), value: relationship.source_holon_id, displayValue: sourceName, minChars: 0, allowCustom: false, clearable: false };
+      if (row.key === 'relationship_type_id') return { type: 'combobox', options: relationshipComboOptions('relationship', relationship.relationship_type_id), value: relationship.relationship_type_id, displayValue: relationshipName, minChars: 0, allowCustom: false, clearable: false };
+      if (row.key === 'target_holon_id') return { type: 'combobox', options: relationshipComboOptions('target', relationship.target_holon_id), value: relationship.target_holon_id, displayValue: targetName, minChars: 0, allowCustom: false, clearable: false };
+      if (row.key === 'position') return { type: 'input', inputType: 'number', step: 1 };
+      return null;
+    },
+    onChange: (row, newValue) =>
+    {
+      if (row.key === 'id') return;
+      void saveRelationshipProperty(relationship, row.key, newValue);
+    },
+  });
+}
 
 function selectHolonInInspector(holon) { if (!holon) return; renderHolonInspector(holon); const node = graph?.nodes?.(`[id = "${String(holon.id).replaceAll('"', '\\"')}"]`); node?.select(); if (node?.nonempty?.()) graph.center(node); }
 function openHolon(holon) { if (!holon) return; selectHolonInInspector(holon); window.dispatchEvent(new CustomEvent('holon:selected', { detail: holon })); }
