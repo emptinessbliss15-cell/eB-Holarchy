@@ -4,6 +4,9 @@ import './eBProvInspector.js';
 
 const FILTER_STORAGE_KEY = 'eB-Holarchy.graphFilter';
 const GRAPH_ROOT_STORAGE_KEY = 'eB-Holarchy.graphRoot';
+const GRAPH_FIT_PADDING = 56;
+const GRAPH_MIN_AUTO_ZOOM = 0.45;
+const GRAPH_MAX_AUTO_ZOOM = 1.25;
 let installed = false;
 let filter = null;
 
@@ -17,6 +20,27 @@ function persistGraphRoot(rootId)
   catch
   {
     // Storage may be unavailable; graph navigation still works for this session.
+  }
+}
+
+function fitGraph(cy)
+{
+  if (!cy) return;
+  const elements = cy.elements();
+  if (!elements.length) return;
+
+  cy.fit(elements, GRAPH_FIT_PADDING);
+
+  const fittedZoom = cy.zoom();
+  const clampedZoom = Math.max(
+    GRAPH_MIN_AUTO_ZOOM,
+    Math.min(GRAPH_MAX_AUTO_ZOOM, fittedZoom),
+  );
+
+  if (clampedZoom !== fittedZoom)
+  {
+    cy.zoom(clampedZoom);
+    cy.center(elements);
   }
 }
 
@@ -69,6 +93,11 @@ function install()
   {
     persistGraphRoot(event.target.data('holonId'));
   });
+
+  // Every root/depth/model render runs a Cytoscape layout. Fit the resulting
+  // graph to the available viewport, but keep tiny graphs from becoming huge
+  // and large graphs from shrinking beyond a useful working scale.
+  cy?.on('layoutstop', () => fitGraph(cy));
 
   installed = true;
 }
