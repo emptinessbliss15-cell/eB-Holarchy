@@ -26,10 +26,75 @@ function persistGraphRoot(rootId)
   }
 }
 
+function currentHolonType()
+{
+  return String(filter?.values?.().holonType || '').trim();
+}
+
+function syncHolonTypeOptions(cy)
+{
+  const select = document.getElementById('graphHolonType');
+  if (!select || !cy) return;
+
+  const selected = currentHolonType() || select.value || '';
+  const types = [...new Set(
+    cy.nodes()
+      .map(node => String(node.data('type') || '').trim())
+      .filter(Boolean),
+  )].sort((a, b) => a.localeCompare(b));
+
+  select.replaceChildren();
+
+  const all = document.createElement('option');
+  all.value = '';
+  all.textContent = 'All';
+  select.appendChild(all);
+
+  for (const type of types)
+  {
+    const option = document.createElement('option');
+    option.value = type;
+    option.textContent = type;
+    select.appendChild(option);
+  }
+
+  if (selected && !types.includes(selected))
+  {
+    const option = document.createElement('option');
+    option.value = selected;
+    option.textContent = selected;
+    select.appendChild(option);
+  }
+
+  select.value = selected;
+}
+
+function applyHolonTypeFilter(cy, holonType = currentHolonType())
+{
+  if (!cy) return;
+  const wanted = String(holonType || '').trim().toLowerCase();
+
+  cy.batch(() =>
+  {
+    cy.nodes().forEach(node =>
+    {
+      const type = String(node.data('type') || '').trim().toLowerCase();
+      node.style('display', !wanted || type === wanted ? 'element' : 'none');
+    });
+
+    cy.edges().forEach(edge =>
+    {
+      const visible = edge.source().style('display') !== 'none'
+        && edge.target().style('display') !== 'none';
+      edge.style('display', visible ? 'element' : 'none');
+    });
+  });
+}
+
 function fitGraph(cy)
 {
   if (!cy) return;
-  const elements = cy.elements();
+  const elements = cy.elements(':visible');
   if (!elements.length) return;
 
   cy.fit(elements, GRAPH_FIT_PADDING);
@@ -68,10 +133,18 @@ function installGraphListeners()
     persistGraphRoot(event.target.data('holonId'));
   });
 
-  // Every root/depth/model render runs a Cytoscape layout. Fit the resulting
-  // graph to the available viewport, but keep tiny graphs from becoming huge
-  // and large graphs from shrinking beyond a useful working scale.
-  cy.on('layoutstop', () => fitGraph(cy));
+  // Every root/depth/model render runs a Cytoscape layout. Rebuild any
+  // model-driven filter choices, reapply the active filters, then fit only
+  // the elements which remain visible.
+  cy.on('layoutstop', () =>
+  {
+    syncHolonTypeOptions(cy);
+    applyHolonTypeFilter(cy);
+    fitGraph(cy);
+  });
+
+  syncHolonTypeOptions(cy);
+  applyHolonTypeFilter(cy);
 
   graphListenersInstalledFor = cy;
   return true;
@@ -120,11 +193,28 @@ function installControls()
         elementId: 'graphProvenance',
         defaultValue: false,
       },
+      {
+        name: 'holonType',
+        label: 'Type',
+        type: 'select',
+        elementId: 'graphHolonType',
+        wrapperClass: 'holarchy-filter-field',
+        options: [
+          { value: '', label: 'All' },
+        ],
+        defaultValue: '',
+      },
     ],
     onChange(values, fieldName)
     {
       if (!fieldName || fieldName === 'depth') setGraphDepth(values.depth || '2');
       if (!fieldName || fieldName === 'provenance') setShowProvenance(values.provenance === true);
+      if (!fieldName || fieldName === 'holonType')
+      {
+        const cy = getHolonGraph();
+        applyHolonTypeFilter(cy, values.holonType);
+        fitGraph(cy);
+      }
     },
   });
 
