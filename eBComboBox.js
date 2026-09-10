@@ -190,10 +190,14 @@ export function createEBComboBox(target, options = {})
   return api;
 }
 
-export function holonComboOptions(holons = [])
+export function holonComboOptions(holons = [], options = {})
 {
-  return holons.map(holon => ({
-    value: holon.id,
-    label: holon.name || '(unnamed)',
-  }));
+  const includeProvenance = options.includeProvenance === true;
+
+  return holons
+    .filter(holon => includeProvenance || String(holon.holon_type || '').toLowerCase() !== 'provenance')
+    .map(holon => ({
+      value: holon.id,
+      label: holon.name || '(unnamed)',
+    }));
 }
