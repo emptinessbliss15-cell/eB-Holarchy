@@ -1,5 +1,6 @@
 import { getHolonGraph, setGraphDepth, setShowProvenance } from './holonGraph.js';
 import { createEBFilter } from './eBFilter.js';
+import './eBProvInspector.js';
 
 const FILTER_STORAGE_KEY = 'eB-Holarchy.graphFilter';
 let installed = false;
