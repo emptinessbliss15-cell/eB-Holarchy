@@ -8,6 +8,15 @@ export function createEBComboBox(target, options = {})
   const source = options.source || [];
   let repositionFrame = null;
   let isPositioning = false;
+  let lastNotifiedValue = null;
+
+  const normalizedChangeValue = value => JSON.stringify(value ?? '');
+
+  const notifyChange = (input, value, api) =>
+  {
+    lastNotifiedValue = normalizedChangeValue(value);
+    if (typeof options.onChange === 'function') options.onChange(input, value, api);
+  };
 
   const positionPanel = () =>
   {
@@ -83,7 +92,7 @@ export function createEBComboBox(target, options = {})
     onClose,
     onSelect: options.onSelect,
     onRemove: options.onRemove,
-    onChange: options.onChange,
+    onChange: notifyChange,
   });
 
   if (!api) throw new Error('Unable to initialize eBComboBox');
@@ -96,11 +105,24 @@ export function createEBComboBox(target, options = {})
   window.addEventListener('resize', reposition);
   window.addEventListener('scroll', reposition, true);
 
+  // Backstop hcg-autocomplete change delivery. In particular, a clear-button
+  // click must reach eB even if the underlying component only updates the
+  // input. When hcg already fired onChange, the value is deduplicated here.
+  const onNativeChange = () =>
+  {
+    const value = options.multiple ? api.getValue() : (target.value ? api.getValue() : '');
+    const normalized = normalizedChangeValue(value);
+    if (normalized === lastNotifiedValue) return;
+    notifyChange(target, value, api);
+  };
+  target.addEventListener('change', onNativeChange);
+
   const baseDestroy = api.destroy.bind(api);
   api.destroy = () =>
   {
     window.removeEventListener('resize', reposition);
     window.removeEventListener('scroll', reposition, true);
+    target.removeEventListener('change', onNativeChange);
     if (repositionFrame != null && typeof cancelAnimationFrame === 'function')
       cancelAnimationFrame(repositionFrame);
     repositionFrame = null;
