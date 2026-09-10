@@ -1,4 +1,5 @@
 import { eBliss } from './eBSDK.js';
+import { mountAppBar } from './eBAppBarInit.js';
 
 // Feature definitions are the source of truth for labels and default modes.
 // The database stores only user overrides, so changing a default affects users
@@ -112,6 +113,7 @@ function addToggleRow(panel, name, definition) {
 export async function initToggles() {
   if (initialized) return;
   initialized = true;
+  await mountAppBar();
   const sessionResult = await eBliss.auth.getSession();
   const user = sessionResult?.data?.session?.user || null;
   await loadToggles(user?.id || null);

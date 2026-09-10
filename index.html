@@ -94,7 +94,9 @@
         await import('./relationshipInspector.js');
         await import('./eBProfiles.js').then(({ initProfiles }) => initProfiles());
         await import('./eBToggles.js').then(({ initToggles }) => initToggles());
+        await import('./eBSettings.js').then(({ initSettings }) => initSettings());
         await import('./eBProvenance.js').then(({ initProvenance }) => initProvenance());
+        await import('./eBProvenanceHistory.js').then(({ initProvenanceHistory }) => initProvenanceHistory());
         window.dispatchEvent(new CustomEvent('features:loaded'));
     </script>
 </body>

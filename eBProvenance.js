@@ -5,8 +5,10 @@ import { showModal } from './eBModal.js';
 let container = null;
 let inspectorObserver = null;
 let pendingTargets = new Map();
+let pendingChanges = [];
 let selectedHolonId = null;
 let selectedHolon = null;
+let inspectorTab = 'props';
 
 function escapeHtml(value)
 {
@@ -30,6 +32,7 @@ async function refreshPendingTargets()
   try
   {
     const changes = await eBliss.changes.list('pending');
+    pendingChanges = changes;
     pendingTargets = new Map();
     changes.forEach(change =>
     {
@@ -45,6 +48,7 @@ async function refreshPendingTargets()
   }
   catch
   {
+    pendingChanges = [];
     pendingTargets = new Map();
   }
 }
@@ -76,6 +80,16 @@ function injectIndicatorStyles()
     }
     .eb-provenance-indicator:hover { opacity: 1; }
     .eb-provenance-indicator:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
+    .eb-provenance-tabs { display: flex; gap: 4px; margin: 8px 0; border-bottom: 1px solid currentColor; }
+    .eb-provenance-tab { border: 0; border-bottom: 2px solid transparent; background: transparent; padding: 5px 9px; cursor: pointer; color: inherit; opacity: .75; }
+    .eb-provenance-tab:hover { opacity: 1; }
+    .eb-provenance-tab.is-active { opacity: 1; border-bottom-color: currentColor; }
+    .eb-provenance-tab:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
+    .eb-provenance-inspector { padding: 4px 0 8px; }
+    .eb-provenance-inspector-item { padding: 8px 0; border-bottom: 1px solid currentColor; }
+    .eb-provenance-inspector-title { font-weight: 600; margin-bottom: 3px; }
+    .eb-provenance-inspector-meta { font-size: .85em; opacity: .75; margin-bottom: 5px; }
+    .eb-provenance-inspector-change { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
   `;
   document.head.appendChild(style);
 }
@@ -184,12 +198,125 @@ function injectFieldControlStyles()
   document.head.appendChild(style);
 }
 
+function humanizeValue(value)
+{
+  if (value === undefined) return '—';
+  if (value === null) return 'null';
+  const text = String(value);
+  try
+  {
+    const parsed = JSON.parse(text);
+    if (parsed && typeof parsed === 'object' && parsed._eBFields) return '[dynamic fields]';
+  }
+  catch { }
+  return text === '' ? 'empty' : text;
+}
+
+function humanizeChange(change)
+{
+  const details = parseChange(change?.provenance?.changes);
+  if (!details || details.entity !== 'holon') return null;
+  const values = details.values || {};
+  const entries = Object.entries(values);
+  if (details.operation === 'update')
+  {
+    return entries.map(([key, value]) =>
+    {
+      const oldValue = change?.provenance?.previous?.[key] ?? change?.provenance?.oldValues?.[key];
+      const label = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      return `${label}: ${oldValue === undefined ? '(previous value unavailable)' : humanizeValue(oldValue)} → ${humanizeValue(value)}`;
+    }).join('\n');
+  }
+  if (details.operation === 'delete') return 'Holon removed';
+  if (details.operation === 'create') return 'Holon created';
+  return prettyChanges(details);
+}
+
+function renderProvInspector(panel)
+{
+  panel.replaceChildren();
+  const changes = pendingChanges.filter(change =>
+  {
+    const details = parseChange(change?.provenance?.changes);
+    return String(details?.targetId || '') === String(selectedHolonId);
+  });
+  if (!changes.length)
+  {
+    const empty = document.createElement('div');
+    empty.className = 'muted';
+    empty.textContent = 'No pending provenance changes for this Holon.';
+    panel.appendChild(empty);
+    return;
+  }
+  changes.forEach(change =>
+  {
+    const details = parseChange(change?.provenance?.changes);
+    const item = document.createElement('article');
+    item.className = 'eb-provenance-inspector-item';
+    const title = document.createElement('div');
+    title.className = 'eb-provenance-inspector-title';
+    title.textContent = details?.operation === 'update' ? 'Holon updated' : `Holon ${details?.operation || 'changed'}`;
+    const meta = document.createElement('div');
+    meta.className = 'eb-provenance-inspector-meta';
+    const p = change.provenance || {};
+    meta.textContent = `${p.timestamp || change.created_at || ''} · ${p.actor || ''} · Pending`;
+    const changeText = document.createElement('pre');
+    changeText.className = 'eb-provenance-inspector-change';
+    changeText.textContent = humanizeChange(change);
+    item.append(title, meta, changeText);
+    panel.appendChild(item);
+  });
+}
+
+function ensureInspectorTabs(grid)
+{
+  if (!selectedHolonId || !grid) return;
+  const content = document.getElementById('holonInspectorContent');
+  if (!content || content.querySelector('.eb-provenance-tabs')) return;
+  const tabs = document.createElement('div');
+  tabs.className = 'eb-provenance-tabs';
+  const props = document.createElement('button');
+  props.type = 'button';
+  props.className = 'eb-provenance-tab';
+  props.textContent = 'Object Props';
+  const prov = document.createElement('button');
+  prov.type = 'button';
+  prov.className = 'eb-provenance-tab';
+  prov.textContent = 'Prov';
+  const panel = document.createElement('div');
+  panel.className = 'eb-provenance-inspector';
+
+  const setTab = tab =>
+  {
+    inspectorTab = tab;
+    props.classList.toggle('is-active', tab === 'props');
+    prov.classList.toggle('is-active', tab === 'prov');
+    grid.hidden = tab !== 'props';
+    panel.hidden = tab !== 'prov';
+    if (tab === 'prov') renderProvInspector(panel);
+  };
+
+  props.addEventListener('click', () => setTab('props'));
+  prov.addEventListener('click', () => setTab('prov'));
+  tabs.append(props, prov);
+  grid.parentElement?.insertBefore(tabs, grid);
+  grid.parentElement?.insertBefore(panel, grid.nextSibling);
+  setTab(inspectorTab);
+}
+
+function openProvTab()
+{
+  inspectorTab = 'prov';
+  requestAnimationFrame(decorateInspector);
+}
+
 function decorateInspector()
 {
   const grid = document.querySelector('#holonInspector .holon-property-grid');
   if (!grid || !selectedHolonId) return;
   hideLegacySchemaContent();
   addFieldControl(grid);
+  ensureInspectorTabs(grid);
   const keys = pendingTargets.get(String(selectedHolonId));
   if (!keys?.size) return;
 
@@ -210,6 +337,12 @@ function decorateInspector()
     button.setAttribute('aria-label', `Pending provenance change for ${text}`);
     button.title = 'Pending change — provenance';
     button.textContent = 'ⓘ';
+    button.addEventListener('click', event =>
+    {
+      event.preventDefault();
+      event.stopPropagation();
+      openProvTab();
+    });
     label.prepend(button);
   });
 }
@@ -236,6 +369,14 @@ function ensureContainer()
   return container;
 }
 
+function setActionBusy(card, action, busy)
+{
+  const buttons = card.querySelectorAll('.eb-provenance-actions button');
+  buttons.forEach(button => { button.disabled = busy; });
+  if (!action) return;
+  action.textContent = busy ? (action.dataset.busyLabel || `${action.textContent}…`) : (action.dataset.defaultLabel || action.textContent);
+}
+
 async function render()
 {
   const root = ensureContainer();
@@ -244,6 +385,7 @@ async function render()
   try
   {
     const changes = await eBliss.changes.list('pending');
+    pendingChanges = changes;
     if (!changes.length)
     {
       list.className = 'eb-provenance-list muted';
@@ -260,17 +402,23 @@ async function render()
       card.className = 'eb-provenance-item';
       const p = change.provenance || {};
       card.innerHTML = `<div class="eb-provenance-title">${escapeHtml(change.name || 'Pending change')}</div><div class="eb-provenance-meta">${escapeHtml(p.timestamp || change.created_at || '')} · ${escapeHtml(p.actor || '')}</div><pre class="eb-provenance-changes">${escapeHtml(prettyChanges(p.changes))}</pre><div class="eb-provenance-actions"><button type="button" data-action="approve">Approve</button><button type="button" data-action="reject">Reject</button></div>`;
-      card.querySelector('[data-action="approve"]').addEventListener('click', async () =>
+      const approveButton = card.querySelector('[data-action="approve"]');
+      const rejectButton = card.querySelector('[data-action="reject"]');
+      approveButton.dataset.defaultLabel = 'Approve';
+      approveButton.dataset.busyLabel = '⟳ Approving…';
+      rejectButton.dataset.defaultLabel = 'Reject';
+      rejectButton.dataset.busyLabel = '⟳ Rejecting…';
+      approveButton.addEventListener('click', async () =>
       {
-        card.querySelectorAll('button').forEach(button => { button.disabled = true; });
+        setActionBusy(card, approveButton, true);
         try { await eBliss.changes.approve(change.id); window.location.reload(); }
-        catch (error) { card.querySelectorAll('button').forEach(button => { button.disabled = false; }); alert(error.message || 'Unable to approve change'); }
+        catch (error) { setActionBusy(card, approveButton, false); alert(error.message || 'Unable to approve change'); }
       });
-      card.querySelector('[data-action="reject"]').addEventListener('click', async () =>
+      rejectButton.addEventListener('click', async () =>
       {
-        card.querySelectorAll('button').forEach(button => { button.disabled = true; });
+        setActionBusy(card, rejectButton, true);
         try { await eBliss.changes.reject(change.id); await render(); }
-        catch (error) { card.querySelectorAll('button').forEach(button => { button.disabled = false; }); alert(error.message || 'Unable to reject change'); }
+        catch (error) { setActionBusy(card, rejectButton, false); alert(error.message || 'Unable to reject change'); }
       });
       list.appendChild(card);
     });
@@ -295,6 +443,7 @@ export function initProvenance()
   {
     selectedHolonId = event.detail?.id ? String(event.detail.id) : null;
     selectedHolon = event.detail || null;
+    inspectorTab = 'props';
     requestAnimationFrame(decorateInspector);
   });
   render();

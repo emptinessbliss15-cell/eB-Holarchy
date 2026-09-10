@@ -94,6 +94,29 @@ export function createEBSupabase()
     return rawUpdateHolon(provenanceId, { name: `${current.provenance.action || 'change'} — ${status}`, Content: JSON.stringify({ ...parsed, [DYNAMIC_FIELDS_KEY]: dynamic }) });
   }
 
+  async function repointPendingRelationshipCreates(fromHolonId, toHolonId)
+  {
+    if (!fromHolonId || !toHolonId || String(fromHolonId) === String(toHolonId)) return;
+    const typeId = await provenanceTypeId();
+    const fields = await provenanceFields();
+    if (!fields.status || !fields.changes) return;
+    const rows = result('Pending relationship changes', await supabase.from('holons').select('id,Content').eq('holon_type_id', typeId));
+    for (const row of rows || [])
+    {
+      let parsed = {};
+      try { parsed = JSON.parse(String(row.Content || '{}')); } catch { continue; }
+      const dynamic = { ...(parsed[DYNAMIC_FIELDS_KEY] || {}) };
+      if (String(dynamic[String(fields.status)] || '').toLowerCase() !== 'pending') continue;
+      let change = dynamic[String(fields.changes)];
+      if (typeof change === 'string') { try { change = JSON.parse(change); } catch { continue; } }
+      if (!change || change.entity !== 'relationship' || change.operation !== 'create') continue;
+      if (String(change.values?.source_holon_id || '') !== String(fromHolonId)) continue;
+      const nextChange = { ...change, values: { ...change.values, source_holon_id: toHolonId } };
+      dynamic[String(fields.changes)] = JSON.stringify(nextChange);
+      await rawUpdateHolon(row.id, { Content: JSON.stringify({ ...parsed, [DYNAMIC_FIELDS_KEY]: dynamic }) });
+    }
+  }
+
   async function applyChange(provenanceId, decision, reason = '')
   {
     const item = await readProvenance(provenanceId);
@@ -104,13 +127,23 @@ export function createEBSupabase()
     let targetId = change?.targetId || null;
     if (change.entity === 'holon')
     {
-      if (change.operation === 'create') targetId = (await rawCreateHolon(change.values)).id;
+      if (change.operation === 'create')
+      {
+        const created = await rawCreateHolon(change.values);
+        targetId = created.id;
+        await repointPendingRelationshipCreates(provenanceId, targetId);
+      }
       else if (change.operation === 'update') await rawUpdateHolon(targetId, change.values);
       else if (change.operation === 'delete') { await rawDeleteHolon(targetId); targetId = null; }
     }
     else if (change.entity === 'relationship')
     {
-      if (change.operation === 'create') targetId = (await rawCreateRelationship(change.values)).id;
+      if (change.operation === 'create')
+      {
+        const existing = result('Relationship lookup', await supabase.from('relationships').select('id').eq('source_holon_id', change.values.source_holon_id).eq('relationship_type_id', change.values.relationship_type_id).eq('target_holon_id', change.values.target_holon_id).maybeSingle());
+        if (existing) targetId = existing.id;
+        else targetId = (await rawCreateRelationship(change.values)).id;
+      }
       else if (change.operation === 'update') await rawUpdateRelationship(targetId, change.values);
       else if (change.operation === 'delete') { await rawDeleteRelationship(targetId); targetId = null; }
     }

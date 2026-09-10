@@ -20,23 +20,34 @@ export class eBGrid {
         if (event.key !== 'Enter' && event.key !== 'F2') return;
         const cell = event.target.closest?.('td[data-column-key]');
         if (!cell || !this.element.contains(cell)) return;
-        const rowElement = cell.closest('tr[data-rowid]');
-        if (!rowElement) return;
-        const rowId = rowElement.dataset.rowid;
-        const row = this.grid.rowById?.get(rowId) ?? this.grid.rowById?.get(Number(rowId));
-        const column = this.options.columns?.find(item => item.key === cell.dataset.columnKey);
-        if (!row || !column || typeof column.editor !== 'function') return;
-
-        const editor = column.editor(row, column);
-        if (!editor) return;
-
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        this._startCustomEditor(cell, row, column, editor);
+        this._startEditorForCell(cell);
+      };
+      this._onClickCapture = (event) => {
+        if (this._customEditor) return;
+        if (event.target.closest?.('button, input, textarea, select, a')) return;
+        const cell = event.target.closest?.('td[data-column-key]');
+        if (!cell || !this.element.contains(cell)) return;
+        this._startEditorForCell(cell);
       };
       this.element.addEventListener('keydown', this._onKeyDownCapture, true);
+      this.element.addEventListener('click', this._onClickCapture, true);
     }
+  }
+
+  _startEditorForCell(cell) {
+    const rowElement = cell.closest('tr[data-rowid]');
+    if (!rowElement) return;
+    const rowId = rowElement.dataset.rowid;
+    const row = this.grid.rowById?.get(rowId) ?? this.grid.rowById?.get(Number(rowId));
+    const column = this.options.columns?.find(item => item.key === cell.dataset.columnKey);
+    if (!row || !column || typeof column.editor !== 'function') return;
+
+    const editor = column.editor(row, column);
+    if (!editor) return;
+
+    const fromKeyboard = false;
+    if (fromKeyboard) return;
+    this._startCustomEditor(cell, row, column, editor);
   }
 
   _startCustomEditor(cell, row, column, editor) {
@@ -69,7 +80,46 @@ export class eBGrid {
       input.style.whiteSpace = 'pre-wrap';
       input.style.overflow = 'auto';
     }
-    cell.replaceChildren(input);
+
+    const editorShell = document.createElement('div');
+    editorShell.className = 'eb-grid-editor';
+    editorShell.style.display = 'flex';
+    editorShell.style.alignItems = isLongText ? 'stretch' : 'center';
+    editorShell.style.gap = '6px';
+    editorShell.style.width = '100%';
+    editorShell.style.boxSizing = 'border-box';
+    editorShell.appendChild(input);
+
+    const actions = document.createElement('span');
+    actions.className = 'eb-grid-editor-actions';
+    actions.style.display = 'inline-flex';
+    actions.style.alignItems = 'center';
+    actions.style.gap = '3px';
+    actions.style.flex = '0 0 auto';
+
+    const saveButton = document.createElement('button');
+    saveButton.type = 'button';
+    saveButton.className = 'eb-grid-editor-save';
+    saveButton.textContent = '✓';
+    saveButton.title = 'Save';
+    saveButton.setAttribute('aria-label', 'Save edit');
+
+    const cancelButton = document.createElement('button');
+    cancelButton.type = 'button';
+    cancelButton.className = 'eb-grid-editor-cancel';
+    cancelButton.textContent = '×';
+    cancelButton.title = 'Cancel';
+    cancelButton.setAttribute('aria-label', 'Cancel edit');
+
+    [saveButton, cancelButton].forEach(button => {
+      button.style.minWidth = '28px';
+      button.style.minHeight = '28px';
+      button.style.padding = '2px 6px';
+      button.style.cursor = 'pointer';
+    });
+    actions.append(saveButton, cancelButton);
+    editorShell.appendChild(actions);
+    cell.replaceChildren(editorShell);
 
     let finished = false;
     let combo = null;
@@ -110,6 +160,16 @@ export class eBGrid {
     };
 
     this._customEditor = { cancel, input };
+    saveButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      commit(isCheckbox ? input.checked : input.value);
+    });
+    cancelButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      cancel();
+    });
 
     if (editor.type === 'combobox') {
       combo = createEBComboBox(input, {
@@ -134,8 +194,9 @@ export class eBGrid {
     }
 
     input.addEventListener('change', () => {
-      debugger;
-      if (isCheckbox) commit(input.checked);
+      if (isCheckbox) {
+        // Keep the checkbox change visible until the user explicitly saves.
+      }
     });
 
     input.addEventListener('keydown', (event) => {
@@ -203,6 +264,10 @@ export class eBGrid {
     if (this._onKeyDownCapture) {
       this.element.removeEventListener('keydown', this._onKeyDownCapture, true);
       this._onKeyDownCapture = null;
+    }
+    if (this._onClickCapture) {
+      this.element.removeEventListener('click', this._onClickCapture, true);
+      this._onClickCapture = null;
     }
     this.grid.destroy();
   }
