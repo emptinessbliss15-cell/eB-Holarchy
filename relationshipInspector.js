@@ -46,6 +46,44 @@ function displayRelationshipRows(relationship, model) {
     });
 }
 
+function relationshipEditor(row, model = {}) {
+  const holonOptions = (model.holons || [])
+    .map(holon => ({ value: holon.id, label: holon.name || holon.id }))
+    .sort((a, b) => String(a.label).localeCompare(String(b.label)));
+  const relationshipTypeOptions = (model.relationshipTypes || [])
+    .map(type => ({ value: type.id, label: type.name || type.id }))
+    .sort((a, b) => String(a.label).localeCompare(String(b.label)));
+
+  if (row.key === 'source_holon_id' || row.key === 'target_holon_id') {
+    return {
+      type: 'combobox',
+      options: holonOptions,
+      value: row.rawValue,
+      displayValue: row.value,
+      minChars: 0,
+      allowCustom: false,
+      clearable: false,
+    };
+  }
+
+  if (row.key === 'relationship_type_id') {
+    return {
+      type: 'combobox',
+      options: relationshipTypeOptions,
+      value: row.rawValue,
+      displayValue: row.value,
+      minChars: 0,
+      allowCustom: false,
+      clearable: false,
+    };
+  }
+
+  // Keep system identity/timestamp fields read-only here. Other relationship
+  // properties can continue to use the grid's ordinary text editor.
+  if (row.key === 'id' || row.key === 'created_at' || row.key === 'updated_at') return null;
+  return { type: 'text' };
+}
+
 async function renderRelationship(relationship) {
   const content = document.getElementById('holonInspectorContent');
   if (!content || !relationship) return;
@@ -73,6 +111,17 @@ async function renderRelationship(relationship) {
       label: 'Edit Relationship',
       onClick: () => window.dispatchEvent(new CustomEvent('relationship:edit', { detail: { relationship } })),
     }],
+    editor: row => relationshipEditor(row, model || {}),
+    onChange: async (row, value) => {
+      try {
+        await eBliss.relationships.update(relationship.id, { [row.key]: value });
+        const current = await eBliss.relationships.get(relationship.id);
+        await renderRelationship(current || { ...relationship, [row.key]: value });
+      } catch (error) {
+        console.error('Unable to update relationship property:', error);
+        await renderRelationship(relationship);
+      }
+    },
     pageSize: Math.max(rows.length, 10),
   });
 }
