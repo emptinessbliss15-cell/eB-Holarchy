@@ -12,6 +12,7 @@ function ensureStyles()
   style.id = 'eb-settings-style';
   style.textContent = `
     .eb-settings { display:grid; gap:12px; }
+    .eb-settings[hidden] { display:none; }
     .eb-settings-section { border:1px solid var(--eb-border); border-radius:7px; padding:14px; background:var(--eb-bg); }
     .eb-settings-heading { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
     .eb-settings-heading h3 { margin:0; }
