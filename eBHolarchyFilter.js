@@ -3,8 +3,22 @@ import { createEBFilter } from './eBFilter.js';
 import './eBProvInspector.js';
 
 const FILTER_STORAGE_KEY = 'eB-Holarchy.graphFilter';
+const GRAPH_ROOT_STORAGE_KEY = 'eB-Holarchy.graphRoot';
 let installed = false;
 let filter = null;
+
+function persistGraphRoot(rootId)
+{
+  try
+  {
+    if (rootId) localStorage.setItem(GRAPH_ROOT_STORAGE_KEY, String(rootId));
+    else localStorage.removeItem(GRAPH_ROOT_STORAGE_KEY);
+  }
+  catch
+  {
+    // Storage may be unavailable; graph navigation still works for this session.
+  }
+}
 
 function install()
 {
@@ -47,6 +61,13 @@ function install()
     const node = event.target;
     node.select();
     node.trigger('tap');
+  });
+
+  // Graph navigation changes root inside holonGraph.js. Persist that same
+  // Holon ID so an app refresh restores the root selected by double-click.
+  cy?.on('dbltap', 'node', event =>
+  {
+    persistGraphRoot(event.target.data('holonId'));
   });
 
   installed = true;
