@@ -7,7 +7,15 @@ export function createEBComboBox(target, options = {})
 
   const source = options.source || [];
   let repositionFrame = null;
-  let isPositioning = false;
+  let lastNotifiedValue = null;
+
+  const normalizedChangeValue = value => JSON.stringify(value ?? '');
+
+  const notifyChange = (input, value, api) =>
+  {
+    lastNotifiedValue = normalizedChangeValue(value);
+    if (typeof options.onChange === 'function') options.onChange(input, value, api);
+  };
 
   const positionPanel = () =>
   {
@@ -83,12 +91,23 @@ export function createEBComboBox(target, options = {})
     onClose,
     onSelect: options.onSelect,
     onRemove: options.onRemove,
-    onChange: options.onChange,
+    onChange: notifyChange,
   });
 
   if (!api) throw new Error('Unable to initialize eBComboBox');
 
   const wrap = target.closest('.hcg-autocomplete');
+  const clearButton = wrap?.querySelector('.hcg-autocomplete-clear');
+
+  const syncClearButton = () =>
+  {
+    if (!clearButton || options.clearable === false) return;
+    const hasValue = options.multiple
+      ? Boolean(api.getValue()?.length)
+      : Boolean(String(target.value || '').trim());
+    clearButton.hidden = !hasValue;
+  };
+
   const reposition = () =>
   {
     if (wrap?.classList.contains('is-open')) schedulePositionPanel();
@@ -96,11 +115,34 @@ export function createEBComboBox(target, options = {})
   window.addEventListener('resize', reposition);
   window.addEventListener('scroll', reposition, true);
 
+  // Keep the clear action synchronized with the visible input value as well
+  // as hcg-autocomplete's internal committed-selection state. This matters
+  // when eB restores or assigns a display value programmatically.
+  const onValueActivity = () => syncClearButton();
+  target.addEventListener('input', onValueActivity);
+  target.addEventListener('change', onValueActivity);
+  requestAnimationFrame(syncClearButton);
+
+  // Backstop hcg-autocomplete change delivery. In particular, a clear-button
+  // click must reach eB even if the underlying component only updates the
+  // input. When hcg already fired onChange, the value is deduplicated here.
+  const onNativeChange = () =>
+  {
+    const value = options.multiple ? api.getValue() : (target.value ? api.getValue() : '');
+    const normalized = normalizedChangeValue(value);
+    if (normalized === lastNotifiedValue) return;
+    notifyChange(target, value, api);
+  };
+  target.addEventListener('change', onNativeChange);
+
   const baseDestroy = api.destroy.bind(api);
   api.destroy = () =>
   {
     window.removeEventListener('resize', reposition);
     window.removeEventListener('scroll', reposition, true);
+    target.removeEventListener('input', onValueActivity);
+    target.removeEventListener('change', onValueActivity);
+    target.removeEventListener('change', onNativeChange);
     if (repositionFrame != null && typeof cancelAnimationFrame === 'function')
       cancelAnimationFrame(repositionFrame);
     repositionFrame = null;
@@ -113,15 +155,17 @@ export function createEBComboBox(target, options = {})
   const baseGetValue = api.getValue.bind(api);
   const getPendingValue = () => (api.input?.value || '').trim();
 
-  const findSourceValue = (text) => {
+  const findSourceValue = (text) =>
+  {
     const normalized = text.toLowerCase();
     const match = Array.isArray(source)
-      ? source.find(item => {
-          const value = typeof item === 'object' && item !== null ? item.value : item;
-          const label = typeof item === 'object' && item !== null ? item.label : item;
-          return String(label ?? '').toLowerCase() === normalized
-            || String(value ?? '').toLowerCase() === normalized;
-        })
+      ? source.find(item =>
+      {
+        const value = typeof item === 'object' && item !== null ? item.value : item;
+        const label = typeof item === 'object' && item !== null ? item.label : item;
+        return String(label ?? '').toLowerCase() === normalized
+          || String(value ?? '').toLowerCase() === normalized;
+      })
       : null;
     if (!match) return text;
     return typeof match === 'object' && match !== null
@@ -129,13 +173,15 @@ export function createEBComboBox(target, options = {})
       : String(match);
   };
 
-  api.getValue = () => {
+  api.getValue = () =>
+  {
     const selected = baseGetValue();
     const pending = getPendingValue();
     if (!pending) return selected;
 
     const pendingValue = findSourceValue(pending);
-    if (Array.isArray(selected)) {
+    if (Array.isArray(selected))
+    {
       return selected.includes(pendingValue) ? selected : [...selected, pendingValue];
     }
     return selected || pendingValue;
@@ -144,10 +190,14 @@ export function createEBComboBox(target, options = {})
   return api;
 }
 
-export function holonComboOptions(holons = [])
+export function holonComboOptions(holons = [], options = {})
 {
-  return holons.map(holon => ({
-    value: holon.id,
-    label: holon.name || '(unnamed)',
-  }));
+  const includeProvenance = options.includeProvenance === true;
+
+  return holons
+    .filter(holon => includeProvenance || String(holon.holon_type || '').toLowerCase() !== 'provenance')
+    .map(holon => ({
+      value: holon.id,
+      label: holon.name || '(unnamed)',
+    }));
 }

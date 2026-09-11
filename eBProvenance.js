@@ -3,6 +3,8 @@ import { eBStatus } from './eBStatus.js';
 import { showModal } from './eBModal.js';
 
 let container = null;
+let reviewDialog = null;
+let reviewList = null;
 let inspectorObserver = null;
 let pendingTargets = new Map();
 let pendingChanges = [];
@@ -90,6 +92,88 @@ function injectIndicatorStyles()
     .eb-provenance-inspector-title { font-weight: 600; margin-bottom: 3px; }
     .eb-provenance-inspector-meta { font-size: .85em; opacity: .75; margin-bottom: 5px; }
     .eb-provenance-inspector-change { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+    .eb-provenance-panel {
+      padding: 0;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+    .eb-provenance-current {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 28px;
+      padding: 4px 9px;
+      border: 1px solid currentColor;
+      border-radius: 6px;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      cursor: pointer;
+      opacity: .82;
+    }
+    .eb-provenance-current:hover { opacity: 1; }
+    .eb-provenance-current[hidden] { display: none; }
+    .eb-provenance-count {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 5px;
+      border-radius: 9px;
+      background: currentColor;
+    }
+    .eb-provenance-count > span {
+      color: Canvas;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .eb-provenance-review-dialog {
+      width: min(680px, calc(100vw - 32px));
+      max-height: min(760px, calc(100vh - 48px));
+      padding: 0;
+      border: 1px solid currentColor;
+      border-radius: 8px;
+      color: inherit;
+      background: Canvas;
+      overflow: hidden;
+    }
+    .eb-provenance-review-dialog::backdrop { background: rgb(0 0 0 / .28); }
+    .eb-provenance-review-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      border-bottom: 1px solid currentColor;
+    }
+    .eb-provenance-review-close {
+      border: 0;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      font-size: 20px;
+      cursor: pointer;
+    }
+    .eb-provenance-list {
+      max-height: calc(100vh - 120px);
+      overflow: auto;
+      padding: 0 12px 12px;
+    }
+    .eb-provenance-item {
+      padding: 12px 0;
+      border-bottom: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+    }
+    .eb-provenance-item:last-child { border-bottom: 0; }
+    .eb-provenance-title { font-weight: 600; }
+    .eb-provenance-meta { margin-top: 2px; font-size: .82em; opacity: .68; }
+    .eb-provenance-summary { margin: 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .eb-provenance-details { margin: 6px 0 10px; }
+    .eb-provenance-details summary { cursor: pointer; opacity: .72; }
+    .eb-provenance-changes { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .eb-provenance-actions { display: flex; gap: 6px; }
   `;
   document.head.appendChild(style);
 }
@@ -215,11 +299,14 @@ function humanizeValue(value)
 function humanizeChange(change)
 {
   const details = parseChange(change?.provenance?.changes);
-  if (!details || details.entity !== 'holon') return null;
+  if (!details) return prettyChanges(change?.provenance?.changes);
   const values = details.values || {};
   const entries = Object.entries(values);
+  const entity = details.entity === 'relationship' ? 'Relationship' : 'Holon';
+
   if (details.operation === 'update')
   {
+    if (details.entity !== 'holon') return `${entity} updated`;
     return entries.map(([key, value]) =>
     {
       const oldValue = change?.provenance?.previous?.[key] ?? change?.provenance?.oldValues?.[key];
@@ -227,8 +314,8 @@ function humanizeChange(change)
       return `${label}: ${oldValue === undefined ? '(previous value unavailable)' : humanizeValue(oldValue)} → ${humanizeValue(value)}`;
     }).join('\n');
   }
-  if (details.operation === 'delete') return 'Holon removed';
-  if (details.operation === 'create') return 'Holon created';
+  if (details.operation === 'delete') return `${entity} removed`;
+  if (details.operation === 'create') return `${entity} created`;
   return prettyChanges(details);
 }
 
@@ -357,16 +444,83 @@ function watchInspector()
   requestAnimationFrame(decorateInspector);
 }
 
+function closeReview()
+{
+  reviewDialog?.close();
+}
+
+function openReview()
+{
+  if (!pendingChanges.length || !reviewDialog) return;
+  reviewDialog.showModal();
+}
+
 function ensureContainer()
 {
   if (container?.isConnected) return container;
   const workspace = document.querySelector('.workspace-primary');
   if (!workspace) return null;
+
   container = document.createElement('section');
-  container.className = 'panel eb-provenance-panel';
-  container.innerHTML = '<div class="panel-heading"><h3>Pending Changes</h3></div><div class="eb-provenance-list muted">Loading…</div>';
+  container.className = 'eb-provenance-panel';
+
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'eb-provenance-current';
+  button.hidden = true;
+  button.title = 'Review pending changes';
+  button.addEventListener('click', openReview);
+
+  const label = document.createElement('span');
+  label.className = 'eb-provenance-current-label';
+  label.textContent = 'Pending';
+
+  const count = document.createElement('span');
+  count.className = 'eb-provenance-count';
+  count.innerHTML = '<span>0</span>';
+
+  button.append(label, count);
+  container.appendChild(button);
   workspace.parentElement?.insertBefore(container, workspace);
+
+  reviewDialog = document.createElement('dialog');
+  reviewDialog.className = 'eb-provenance-review-dialog';
+
+  const header = document.createElement('div');
+  header.className = 'eb-provenance-review-header';
+
+  const title = document.createElement('strong');
+  title.textContent = 'Pending Changes';
+
+  const closeButton = document.createElement('button');
+  closeButton.type = 'button';
+  closeButton.className = 'eb-provenance-review-close';
+  closeButton.textContent = '×';
+  closeButton.title = 'Close pending changes';
+  closeButton.addEventListener('click', closeReview);
+
+  header.append(title, closeButton);
+  reviewList = document.createElement('div');
+  reviewList.className = 'eb-provenance-list';
+  reviewDialog.append(header, reviewList);
+  document.body.appendChild(reviewDialog);
+
+  reviewDialog.addEventListener('click', event =>
+  {
+    if (event.target === reviewDialog) closeReview();
+  });
+
   return container;
+}
+
+function setPendingCount(count)
+{
+  const button = container?.querySelector('.eb-provenance-current');
+  const countText = container?.querySelector('.eb-provenance-count > span');
+  if (!button || !countText) return;
+  button.hidden = count === 0;
+  countText.textContent = String(count);
+  button.setAttribute('aria-label', `${count} pending change${count === 1 ? '' : 's'}`);
 }
 
 function setActionBusy(card, action, busy)
@@ -379,53 +533,116 @@ function setActionBusy(card, action, busy)
 
 async function render()
 {
-  const root = ensureContainer();
-  if (!root) return;
-  const list = root.querySelector('.eb-provenance-list');
+  ensureContainer();
+  if (!reviewList) return;
+
   try
   {
     const changes = await eBliss.changes.list('pending');
     pendingChanges = changes;
+    setPendingCount(changes.length);
+    reviewList.replaceChildren();
+
     if (!changes.length)
     {
-      list.className = 'eb-provenance-list muted';
-      list.textContent = 'No pending changes.';
+      closeReview();
       await refreshPendingTargets();
       decorateInspector();
       return;
     }
-    list.className = 'eb-provenance-list';
-    list.replaceChildren();
+
     changes.forEach(change =>
     {
       const card = document.createElement('article');
       card.className = 'eb-provenance-item';
       const p = change.provenance || {};
-      card.innerHTML = `<div class="eb-provenance-title">${escapeHtml(change.name || 'Pending change')}</div><div class="eb-provenance-meta">${escapeHtml(p.timestamp || change.created_at || '')} · ${escapeHtml(p.actor || '')}</div><pre class="eb-provenance-changes">${escapeHtml(prettyChanges(p.changes))}</pre><div class="eb-provenance-actions"><button type="button" data-action="approve">Approve</button><button type="button" data-action="reject">Reject</button></div>`;
-      const approveButton = card.querySelector('[data-action="approve"]');
-      const rejectButton = card.querySelector('[data-action="reject"]');
+      const details = parseChange(p.changes);
+      const entity = details?.entity === 'relationship' ? 'Relationship' : 'Holon';
+      const operation = details?.operation ? details.operation[0].toUpperCase() + details.operation.slice(1) : 'Change';
+
+      const title = document.createElement('div');
+      title.className = 'eb-provenance-title';
+      title.textContent = `${operation} ${entity}`;
+
+      const meta = document.createElement('div');
+      meta.className = 'eb-provenance-meta';
+      meta.textContent = `${p.timestamp || change.created_at || ''} · ${p.actor || ''}`;
+
+      const summary = document.createElement('div');
+      summary.className = 'eb-provenance-summary';
+      summary.textContent = humanizeChange(change) || change.name || 'Pending change';
+
+      const detailsElement = document.createElement('details');
+      detailsElement.className = 'eb-provenance-details';
+      const detailsSummary = document.createElement('summary');
+      detailsSummary.textContent = 'Raw change';
+      const raw = document.createElement('pre');
+      raw.className = 'eb-provenance-changes';
+      raw.textContent = prettyChanges(p.changes);
+      detailsElement.append(detailsSummary, raw);
+
+      const actions = document.createElement('div');
+      actions.className = 'eb-provenance-actions';
+      const approveButton = document.createElement('button');
+      approveButton.type = 'button';
+      approveButton.dataset.action = 'approve';
       approveButton.dataset.defaultLabel = 'Approve';
       approveButton.dataset.busyLabel = '⟳ Approving…';
+      approveButton.textContent = 'Approve';
+      const rejectButton = document.createElement('button');
+      rejectButton.type = 'button';
+      rejectButton.dataset.action = 'reject';
       rejectButton.dataset.defaultLabel = 'Reject';
       rejectButton.dataset.busyLabel = '⟳ Rejecting…';
+      rejectButton.textContent = 'Reject';
+      actions.append(approveButton, rejectButton);
+
       approveButton.addEventListener('click', async () =>
       {
         setActionBusy(card, approveButton, true);
-        try { await eBliss.changes.approve(change.id); window.location.reload(); }
-        catch (error) { setActionBusy(card, approveButton, false); alert(error.message || 'Unable to approve change'); }
+        try
+        {
+          await eBliss.changes.approve(change.id);
+          setStatus('Change approved', 'success');
+          await render();
+          window.dispatchEvent(new CustomEvent('eB:modelChanged', { detail: { provenanceId: change.id, status: 'approved' } }));
+        }
+        catch (error)
+        {
+          setActionBusy(card, approveButton, false);
+          setStatus(error.message || 'Unable to approve change', 'error');
+        }
       });
+
       rejectButton.addEventListener('click', async () =>
       {
         setActionBusy(card, rejectButton, true);
-        try { await eBliss.changes.reject(change.id); await render(); }
-        catch (error) { setActionBusy(card, rejectButton, false); alert(error.message || 'Unable to reject change'); }
+        try
+        {
+          await eBliss.changes.reject(change.id);
+          setStatus('Change rejected', 'success');
+          await render();
+        }
+        catch (error)
+        {
+          setActionBusy(card, rejectButton, false);
+          setStatus(error.message || 'Unable to reject change', 'error');
+        }
       });
-      list.appendChild(card);
+
+      card.append(title, meta, summary, detailsElement, actions);
+      reviewList.appendChild(card);
     });
+
     await refreshPendingTargets();
     decorateInspector();
   }
-  catch (error) { list.className = 'eb-provenance-list'; list.textContent = error.message || 'Unable to load pending changes.'; }
+  catch (error)
+  {
+    reviewList.className = 'eb-provenance-list';
+    reviewList.textContent = error.message || 'Unable to load pending changes.';
+    setStatus(error.message || 'Unable to load pending changes', 'error');
+  }
 }
 
 function setStatus(text, level = 'info')
