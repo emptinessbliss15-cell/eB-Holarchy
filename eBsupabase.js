@@ -52,14 +52,14 @@ export function createEBSupabase()
     return Object.fromEntries((fields || []).map(field => [String(field.name).trim().toLowerCase(), field.id]));
   }
 
-  async function createProvenance(action, changes, targetHolonId = null)
+  async function createProvenance(action, changes, targetHolonId = null, source = 'eB-Holarchy SDK')
   {
     const fields = await provenanceFields();
     const now = new Date().toISOString();
     const actor = await currentUserId();
     const values = {};
     const set = (name, value) => { if (fields[name]) values[String(fields[name])] = value; };
-    set('timestamp', now); set('action', action); set('status', 'pending'); set('actor', actor || 'anonymous'); set('source', 'eB-Holarchy SDK'); set('changes', changes);
+    set('timestamp', now); set('action', action); set('status', 'pending'); set('actor', actor || 'anonymous'); set('source', source); set('changes', changes);
     const provenance = await rawCreateHolon({ holon_type: 'Provenance', name: `${action} — pending`, Content: JSON.stringify({ [DYNAMIC_FIELDS_KEY]: values }) });
     if (targetHolonId)
     {
@@ -147,9 +147,10 @@ export function createEBSupabase()
       else if (change.operation === 'update') await rawUpdateRelationship(targetId, change.values);
       else if (change.operation === 'delete') { await rawDeleteRelationship(targetId); targetId = null; }
     }
+    else if (change.entity === 'bundle' && change.operation === 'import') targetId = await applyHolonBundle(change.bundle);
     else throw new Error(`Unsupported change entity: ${change?.entity || 'unknown'}`);
     const approved = await setProvenanceStatus(provenanceId, 'approved', { reason });
-    if (targetId && change.entity === 'holon')
+    if (targetId && (change.entity === 'holon' || change.entity === 'bundle'))
     {
       const ofType = result('of relationship type', await supabase.from('relationship_types').select('id').eq('name', 'of').single());
       const exists = result('Provenance link', await supabase.from('relationships').select('id').eq('source_holon_id', provenanceId).eq('relationship_type_id', ofType.id).eq('target_holon_id', targetId).maybeSingle());
@@ -157,6 +158,75 @@ export function createEBSupabase()
     }
     emitChange('eB:modelChanged', { provenanceId, status: 'approved', targetId });
     return approved;
+  }
+
+  function prepareHolonBundle(bundle)
+  {
+    if (bundle?.format !== 'eBliss Holon Bundle' || !bundle?.root) throw new Error('Invalid eBliss Holon Bundle');
+    const copy = JSON.parse(JSON.stringify(bundle));
+    const keys = new Set();
+    let count = 0;
+    const visit = node =>
+    {
+      if (!node?.key || !node?.name || !node?.type || !Array.isArray(node.children)) throw new Error('Bundle contains an invalid Holon');
+      if (keys.has(node.key)) throw new Error(`Duplicate bundle key: ${node.key}`);
+      keys.add(node.key);
+      node.id ||= crypto.randomUUID();
+      if (++count > 2000) throw new Error('Bundle exceeds the 2,000 Holon import limit');
+      node.children.forEach(child => { child.relationshipId ||= crypto.randomUUID(); visit(child); });
+    };
+    visit(copy.root);
+    return copy;
+  }
+
+  async function findOrCreateHolonType(name)
+  {
+    const existing = result('Holon type lookup', await supabase.from('holon_types').select('id').eq('name', name).maybeSingle());
+    return existing || result('Holon type', await supabase.from('holon_types').insert({ name, description: `Imported document ${name}` }).select('id').single());
+  }
+
+  async function findOrCreateRelationshipType(name)
+  {
+    const existing = result('Relationship type lookup', await supabase.from('relationship_types').select('id').eq('name', name).maybeSingle());
+    return existing || result('Relationship type', await supabase.from('relationship_types').insert({ name, inverse_name: 'contains', description: 'A document Holon is part of a parent document Holon.' }).select('id').single());
+  }
+
+  async function applyHolonBundle(bundle)
+  {
+    const nodes = [], edges = [];
+    const walk = (node, parent = null) =>
+    {
+      nodes.push(node);
+      if (parent) edges.push({ child: node, parent });
+      node.children.forEach(child => walk(child, node));
+    };
+    walk(bundle.root);
+    const typeNames = [...new Set(nodes.map(node => node.type))];
+    const typeRows = await Promise.all(typeNames.map(findOrCreateHolonType));
+    const typeIds = Object.fromEntries(typeNames.map((name, index) => [name, typeRows[index].id]));
+    const partOf = await findOrCreateRelationshipType('part of');
+    const holonRows = nodes.map(node => ({
+      id: node.id,
+      holon_type_id: typeIds[node.type],
+      name: node.name,
+      Content: JSON.stringify({ _legacyContent: node.content || '', _eBImport: { sourceKey: node.key, ...(node === bundle.root ? { source: bundle.source } : {}) } }),
+    }));
+    result('Imported Holons', await supabase.from('holons').upsert(holonRows, { onConflict: 'id' }));
+    if (edges.length) result('Imported relationships', await supabase.from('relationships').upsert(edges.map(({ child, parent }) => ({
+      id: child.relationshipId,
+      source_holon_id: child.id,
+      relationship_type_id: partOf.id,
+      target_holon_id: parent.id,
+      position: Number(child.position || 0),
+    })), { onConflict: 'id' }));
+    return bundle.root.id;
+  }
+
+  async function stageHolonBundle(bundle)
+  {
+    const prepared = prepareHolonBundle(bundle);
+    const source = `${prepared.source?.title || 'External source'} ${prepared.source?.version || ''}`.trim();
+    return createProvenance('import', JSON.stringify({ entity: 'bundle', operation: 'import', bundle: prepared }), null, source);
   }
 
   async function createFieldDefinition(typeName, values = {})
@@ -189,6 +259,7 @@ export function createEBSupabase()
     holonTypes: { async create(values) { const name = String(values?.name ?? '').trim(); if (!name) throw new Error('Holon type name is required'); const description = String(values?.description ?? '').trim(); return result('Holon type', await supabase.from('holon_types').insert({ name, description }).select().single()); } },
     relationshipTypes: { async create(values) { const name = String(values?.name ?? '').trim(); if (!name) throw new Error('Relationship type name is required'); const description = String(values?.description ?? '').trim(); return result('Relationship type', await supabase.from('relationship_types').insert({ name, description }).select().single()); } },
     relationships: { async create(values) { return createProvenance('create', JSON.stringify({ entity: 'relationship', operation: 'create', values })); }, async get(relationshipId) { return result('Relationship', await supabase.from('relationships_view').select('*').eq('id', relationshipId).single()); }, async update(relationshipId, values) { return createProvenance('update', JSON.stringify({ entity: 'relationship', operation: 'update', targetId: relationshipId, values }), null); }, async delete(relationshipId) { return createProvenance('delete', JSON.stringify({ entity: 'relationship', operation: 'delete', targetId: relationshipId })); }, },
+    imports: { stage: stageHolonBundle },
     fieldDefinitions: { create(typeName, values) { return createFieldDefinition(typeName, values); } },
     changes: { async list(status = 'pending') { const typeId = await provenanceTypeId(); const rows = result('Changes', await supabase.from('holons_view').select('*').eq('holon_type_id', typeId).order('created_at', { ascending: false })); const fields = await provenanceFields(); return (rows || []).map(row => { let parsed = {}; try { parsed = JSON.parse(String(row.Content || '{}')); } catch { } const dynamic = parsed[DYNAMIC_FIELDS_KEY] || {}; const item = { ...row, provenance: Object.fromEntries(Object.entries(fields).map(([name, id]) => [name, dynamic[String(id)]])) }; return item; }).filter(item => !status || item.provenance.status === status); }, async get(id) { return readProvenance(id); }, async approve(id, reason = '') { return applyChange(id, 'approve', reason); }, async reject(id, reason = '') { return applyChange(id, 'reject', reason); } }
   };
