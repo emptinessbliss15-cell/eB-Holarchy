@@ -53,6 +53,27 @@ function installPin() {
   heading.appendChild(button);
 }
 
+function installProvenanceStrip() {
+  if (document.querySelector('.eb-provenance-strip')) return;
+  const shell = workspace();
+  const control = document.querySelector('.holarchy-filter-prov');
+  if (!shell || !control) return;
+
+  const strip = document.createElement('section');
+  strip.className = 'eb-provenance-strip';
+  strip.setAttribute('aria-label', 'Provenance');
+
+  const title = document.createElement('span');
+  title.className = 'eb-provenance-strip-title';
+  title.textContent = 'Provenance';
+
+  const label = control.querySelector('label');
+  if (label) label.textContent = 'Show on graph';
+
+  strip.append(title, control);
+  shell.parentElement?.insertBefore(strip, shell);
+}
+
 function attachGraphBackground() {
   const cy = getHolonGraph();
   if (!cy || cy === graph) return;
@@ -68,6 +89,7 @@ function attachGraphBackground() {
 
 export function initInspectorPanel() {
   installPin();
+  installProvenanceStrip();
   hasSelection = false;
   sync();
 
