@@ -92,6 +92,7 @@
         await import('./fcoseAdapter.js');
         await import(`./app.js?v=${Date.now()}`);
         await import('./eBHolarchyFilter.js').then(({ initHolarchyFilter }) => initHolarchyFilter());
+        await import('./coseTuner.js').then(({ initCoseTuner }) => initCoseTuner());
         await import('./relationshipInspector.js');
         await import('./relationshipContext.js').then(({ initRelationshipContext }) => initRelationshipContext());
         await import('./relationshipBulkEdit.js').then(({ initRelationshipBulkEdit }) => initRelationshipBulkEdit());
