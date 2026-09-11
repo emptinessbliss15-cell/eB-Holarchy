@@ -128,6 +128,13 @@ function setView(view) {
   const documentPanel = document.getElementById('documentViewer');
   if (!workspace || !graph || !documentPanel) return;
   const next = ['graph', 'split', 'document'].includes(view) ? view : 'split';
+  const viewSwitch = document.getElementById('workspaceView');
+  const graphHeading = graph.querySelector('.holarchy-heading');
+  const documentHeading = documentPanel.querySelector('.panel-heading');
+  if (viewSwitch && graphHeading && documentHeading) {
+    if (next === 'document') documentHeading.appendChild(viewSwitch);
+    else graphHeading.insertBefore(viewSwitch, graphHeading.querySelector('.holarchy-filter'));
+  }
   workspace.dataset.view = next;
   graph.hidden = next === 'document';
   documentPanel.hidden = next === 'graph';
