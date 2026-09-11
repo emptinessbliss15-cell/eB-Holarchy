@@ -94,6 +94,7 @@
         await import('./eBHolarchyFilter.js').then(({ initHolarchyFilter }) => initHolarchyFilter());
         await import('./relationshipInspector.js');
         await import('./relationshipContext.js').then(({ initRelationshipContext }) => initRelationshipContext());
+        await import('./relationshipBulkEdit.js').then(({ initRelationshipBulkEdit }) => initRelationshipBulkEdit());
         await import('./eBInspectorPanel.js').then(({ initInspectorPanel }) => initInspectorPanel());
         await import('./eBProfiles.js').then(({ initProfiles }) => initProfiles());
         await import('./eBToggles.js').then(({ initToggles }) => initToggles());
