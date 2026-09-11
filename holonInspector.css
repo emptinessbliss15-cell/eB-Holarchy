@@ -13,6 +13,45 @@
   display: none !important;
 }
 
+.eb-provenance-strip {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0 0 10px;
+  padding: 7px 10px;
+  border: 1px solid var(--eb-border);
+  border-radius: 6px;
+  background: var(--eb-input-bg);
+}
+
+.eb-provenance-strip-title {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.eb-provenance-strip .holarchy-filter-prov {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  margin: 0;
+}
+
+.eb-provenance-strip .holarchy-filter-prov label {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: .78;
+  cursor: pointer;
+}
+
+.eb-provenance-strip .holarchy-filter-prov input {
+  margin: 0;
+  accent-color: var(--eb-accent, #5b8def);
+}
+
 .holon-inspector {
   min-height: 0 !important;
   height: 100%;
