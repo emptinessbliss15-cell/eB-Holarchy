@@ -71,6 +71,25 @@ button { cursor: pointer; }
 .workspace-grid { display: grid; grid-template-columns: minmax(240px,360px) minmax(0,1fr); gap: 18px; }
 .panel-graph { grid-column: 1 / -1; }
 #holonGraph { width: 100%; height: 460px; min-height: 320px; border: 1px solid var(--eb-border); border-radius: 6px; background: var(--eb-surface-alt); }
+.workspace-primary[data-view="split"] { grid-template-columns: minmax(0,1fr) minmax(360px,1fr); }
+.workspace-primary[data-view="split"] > .holon-inspector { display: none !important; }
+.workspace-primary[data-view="document"] { grid-template-columns: minmax(0,1fr) minmax(280px,360px); }
+.panel-document { min-width: 0; height: 510px; overflow: hidden; }
+.panel-document > .panel-heading { margin-bottom: 0; padding-bottom: 8px; border-bottom: 1px solid var(--eb-border); }
+.eb-document-content { height: 460px; overflow: auto; padding: 12px 18px 40px; scroll-behavior: smooth; }
+.eb-document-content h1 { margin: 0 0 1.2rem; font-size: 1.65rem; }
+.eb-document-content h2 { margin: 1.8rem 0 .75rem; font-size: 1.3rem; }
+.eb-document-content h3 { margin: 1.35rem 0 .55rem; font-size: 1.08rem; }
+.eb-document-content h4 { margin: 1rem 0 .4rem; font-size: .98rem; }
+.eb-document-passage { border-radius: 4px; outline: 0; }
+.eb-document-passage[data-holon-id] { cursor: pointer; }
+.eb-document-passage.is-selected { background: color-mix(in srgb, #f59e0b 18%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, #f59e0b 18%, transparent); }
+.eb-document-passage:focus-visible { outline: 2px solid var(--eb-accent,#5b8def); outline-offset: 2px; }
+.eb-document-text { white-space: pre-wrap; line-height: 1.55; }
+p.eb-document-content-block { margin: .6rem 0; line-height: 1.55; }
+.eb-view-switch { display: inline-flex; padding: 2px; border: 1px solid var(--eb-border); border-radius: 6px; background: var(--eb-surface-alt); }
+.eb-view-switch button { padding: 3px 7px; border: 0; border-radius: 4px; background: transparent; color: var(--eb-text); font-size: 11px; }
+.eb-view-switch button.is-active { background: var(--eb-input-bg); box-shadow: 0 1px 3px rgb(0 0 0 / .18); font-weight: 650; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
 .panel-heading h3 { margin: 0; }
 .panel-heading .muted { font-size: 12px; }
@@ -119,7 +138,7 @@ button { cursor: pointer; }
   .holarchy-filter #graphDepth { color-scheme: dark; background: var(--eb-input-bg); color: var(--eb-text); }
   .holarchy-filter #graphDepth option { background: var(--eb-input-bg); color: var(--eb-text); }
 }
-@media (max-width: 760px) { .eb-header-inner { grid-template-columns: auto 1fr; justify-items: start; } .eb-brand, .eb-app-name, .eb-row { grid-column: 2; } .eb-app-name { text-align: left; } .eb-row { justify-content: flex-start; } .eb-status { grid-template-columns: 1fr; } .eb-navigation { grid-template-columns: 1fr; } .eb-tree { border-right: 0; border-bottom: 1px solid var(--eb-border); max-height: 35vh; } .workspace-grid { grid-template-columns: 1fr; } .panel-actions { margin-left: auto; } }
+@media (max-width: 760px) { .eb-header-inner { grid-template-columns: auto 1fr; justify-items: start; } .eb-brand, .eb-app-name, .eb-row { grid-column: 2; } .eb-app-name { text-align: left; } .eb-row { justify-content: flex-start; } .eb-status { grid-template-columns: 1fr; } .eb-navigation { grid-template-columns: 1fr; } .eb-tree { border-right: 0; border-bottom: 1px solid var(--eb-border); max-height: 35vh; } .workspace-grid, .workspace-primary[data-view="split"], .workspace-primary[data-view="document"] { grid-template-columns: 1fr; } .panel-actions { margin-left: auto; } }
 .eb-confirm { position: fixed; inset: auto; margin: 0; box-sizing: border-box; width: 320px; padding: 16px; overflow: auto; border: 1px solid var(--eb-border-strong); border-radius: 8px; background: var(--eb-surface); color: var(--eb-text); box-shadow: 0 8px 24px rgba(0,0,0,.22); font: inherit; overflow-wrap: anywhere; }
 .eb-confirm::backdrop { background: transparent; }
 .eb-confirm h2 { margin: 0 0 8px; font-size: 16px; }
