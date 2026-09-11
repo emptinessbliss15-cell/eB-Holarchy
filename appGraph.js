@@ -18,6 +18,7 @@ const elements = {
 };
 let holons = [], relationships = [], relationshipTypes = [], holonTypes = [];
 let graph = null, graphRootCombo = null;
+let graphRelationshipDropInstalled = false;
 
 function setStatus(text, level = 'info') { if (!text) return status.clear(); status[level](text); }
 
@@ -139,13 +140,72 @@ async function createRelationship() {
   catch (error) { setStatus(error.message || 'Unable to create relationship', 'error'); }
 }
 
+async function createDroppedRelationship(sourceId, targetId) {
+  if (!sourceId || !targetId || String(sourceId) === String(targetId)) return;
+  const source = holons.find(item => String(item.id) === String(sourceId));
+  const target = holons.find(item => String(item.id) === String(targetId));
+  if (!source || !target) return;
+  if (!relationshipTypes.length) return setStatus('No relationship types are available', 'warn');
+
+  const values = await showModal({
+    title: `Relate ${source.name || '(unnamed)'} → ${target.name || '(unnamed)'}`,
+    submitLabel: 'Create Relationship',
+    fields: [
+      { name: 'relationship_type_id', label: 'Relationship', type: 'select', options: relationshipTypeOptions(), required: true },
+      { name: 'position', label: 'Position', type: 'number', value: '0' },
+    ],
+  });
+  if (!values?.relationship_type_id) return;
+
+  setStatus(`Creating ${source.name || 'Holon'} → ${target.name || 'Holon'} relationship…`);
+  try {
+    await eBliss.relationships.create({
+      source_holon_id: source.id,
+      relationship_type_id: values.relationship_type_id,
+      target_holon_id: target.id,
+      position: Number(values.position) || 0,
+    });
+    await loadModel();
+    setStatus('Relationship created', 'success');
+  } catch (error) { setStatus(error.message || 'Unable to create relationship', 'error'); }
+}
+
+function installGraphRelationshipDrop() {
+  if (!graph || graphRelationshipDropInstalled) return;
+  graphRelationshipDropInstalled = true;
+  let draggedNodeId = null;
+
+  graph.on('grab', 'node', event => {
+    draggedNodeId = String(event.target.id());
+  });
+
+  graph.on('free', 'node', event => {
+    const sourceId = draggedNodeId || String(event.target.id());
+    draggedNodeId = null;
+    const sourceNode = event.target;
+    const point = sourceNode.renderedPosition();
+    const tolerance = 14;
+    const targetNode = graph.nodes().filter(node => {
+      if (String(node.id()) === sourceId) return false;
+      const box = node.renderedBoundingBox({ includeLabels: false, includeOverlays: false });
+      return point.x >= box.x1 - tolerance && point.x <= box.x2 + tolerance
+        && point.y >= box.y1 - tolerance && point.y <= box.y2 + tolerance;
+    }).first();
+
+    if (!targetNode?.length) return;
+    createDroppedRelationship(sourceId, String(targetNode.id()));
+  });
+}
+
 async function loadModel() {
   setStatus('Loading Holon model…');
   try {
     const model = await loadHolons(eBliss);
     holons = model.holons; relationships = model.relationships; relationshipTypes = model.relationshipTypes; holonTypes = model.holonTypes || [];
-    if (!graph) graph = createHolonGraph({ element: elements.graph, holons, relationships, relationshipTypes, rootId: null });
-    else updateHolonGraph({ holons, relationships, relationshipTypes });
+    if (!graph) {
+      graph = createHolonGraph({ element: elements.graph, holons, relationships, relationshipTypes, rootId: null });
+      installGraphRelationshipDrop();
+    } else updateHolonGraph({ holons, relationships, relationshipTypes });
     refreshGraphRootCombo();
     setStatus(`${holons.length} Holons · ${relationships.length} relationships`, 'success');
   } catch (error) { setStatus(error.message || 'Unable to load Holon model', 'error'); }
@@ -157,7 +217,7 @@ async function applySession(session) {
   if (elements.refresh) elements.refresh.disabled = !user;
   if (user) return loadModel();
   holons = []; relationships = []; relationshipTypes = []; holonTypes = [];
-  destroyHolonGraph(); graph = null; graphRootCombo?.destroy?.(); graphRootCombo = null;
+  destroyHolonGraph(); graph = null; graphRootCombo?.destroy?.(); graphRootCombo = null; graphRelationshipDropInstalled = false;
   setStatus('Sign in to open the Holon Workspace');
 }
 
