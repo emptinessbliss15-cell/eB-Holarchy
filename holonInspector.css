@@ -1,7 +1,8 @@
 /* Holon inspector: fill the available vertical space and scroll internally. */
 .workspace-primary {
-  min-height: calc(100vh - 150px);
-  align-items: stretch;
+  --eb-workspace-pane-height: clamp(560px, 82vh, 920px);
+  min-height: 0;
+  align-items: start;
 }
 
 .workspace-primary.inspector-hidden {
@@ -51,7 +52,7 @@
 .holon-property-grid { min-height: 0; }
 
 #holonGraph {
-  height: 100%;
+  height: var(--eb-workspace-pane-height);
   min-height: 460px;
 }
 
@@ -59,4 +60,5 @@
   .workspace-primary { min-height: 0; }
   #holonGraph { height: 460px; }
   .holon-inspector { height: 460px; }
+  .panel-document { height: 460px; margin-top: 0 !important; }
 }
