@@ -1,6 +1,7 @@
 import { getHolonGraph } from './holonGraph.js';
 
 const STORAGE_KEY = 'eB-Holarchy.coseOptions';
+const PRESETS_STORAGE_KEY = 'eB-Holarchy.cosePresets';
 const defaults = Object.freeze({
   nodeRepulsion: 400000,
   idealEdgeLength: 100,
@@ -19,7 +20,19 @@ function loadValues() {
 }
 
 let values = loadValues();
+let presets = loadPresets();
 let panel = null;
+
+function loadPresets() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(PRESETS_STORAGE_KEY) || '{}');
+    return stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {};
+  } catch { return {}; }
+}
+
+function savePresets() {
+  try { localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(presets)); } catch {}
+}
 
 function saveValues() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(values)); } catch {}
@@ -65,6 +78,9 @@ function installStyles() {
     .eb-cose-head button { border:0; background:transparent; color:inherit; cursor:pointer; font-size:16px; }
     .eb-cose-row { display:grid; grid-template-columns:minmax(0,1fr) 86px; align-items:center; gap:8px; margin:5px 0; font-size:11px; }
     .eb-cose-row input { width:100%; box-sizing:border-box; padding:3px 5px; border:1px solid var(--eb-border,#aaa); border-radius:4px; background:var(--eb-bg,#fff); color:var(--eb-text,#222); }
+    .eb-cose-presets { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px; margin-bottom:9px; }
+    .eb-cose-presets select { min-width:0; padding:4px 5px; border:1px solid var(--eb-border,#aaa); border-radius:4px; background:var(--eb-bg,#fff); color:var(--eb-text,#222); }
+    .eb-cose-presets button { padding:4px 7px; white-space:nowrap; border:1px solid var(--eb-border-strong,#777); border-radius:5px; background:var(--eb-bg,#fff); color:var(--eb-text,#222); cursor:pointer; }
     .eb-cose-actions { display:flex; gap:6px; margin-top:9px; }
     .eb-cose-actions button { flex:1; padding:5px 7px; border:1px solid var(--eb-border-strong,#777); border-radius:5px; background:var(--eb-bg,#fff); color:var(--eb-text,#222); cursor:pointer; }
   `;
@@ -89,6 +105,42 @@ export function initCoseTuner() {
   panel.innerHTML = '<div class="eb-cose-head"><span>CoSE Layout</span><button type="button" aria-label="Close">×</button></div>';
   panel.querySelector('button').addEventListener('click', () => { panel.hidden = true; });
 
+  const presetControls = document.createElement('div');
+  presetControls.className = 'eb-cose-presets';
+  const presetSelect = document.createElement('select');
+  presetSelect.setAttribute('aria-label', 'Saved CoSE settings');
+  const renderPresets = selectedName => {
+    presetSelect.replaceChildren(new Option('Saved settings…', ''));
+    Object.keys(presets).sort((a, b) => a.localeCompare(b)).forEach(name => {
+      presetSelect.add(new Option(name, name, false, name === selectedName));
+    });
+  };
+  const syncFields = () => {
+    panel.querySelectorAll('[data-cose-key]').forEach(input => { input.value = String(values[input.dataset.coseKey]); });
+  };
+  presetSelect.addEventListener('change', () => {
+    const preset = presets[presetSelect.value];
+    if (!preset) return;
+    values = { ...defaults, ...preset };
+    saveValues();
+    syncFields();
+    runLayout();
+  });
+  const saveAs = document.createElement('button');
+  saveAs.type = 'button';
+  saveAs.textContent = 'Save As';
+  saveAs.addEventListener('click', () => {
+    const suggestedName = presetSelect.value || 'New Settings';
+    const name = window.prompt('Save CoSE settings as:', suggestedName)?.trim();
+    if (!name) return;
+    presets[name] = { ...values };
+    savePresets();
+    renderPresets(name);
+  });
+  renderPresets();
+  presetControls.append(presetSelect, saveAs);
+  panel.appendChild(presetControls);
+
   const fields = [
     ['Node repulsion', 'nodeRepulsion', 0, 2000000, 10000],
     ['Ideal edge length', 'idealEdgeLength', 10, 500, 5],
@@ -112,7 +164,8 @@ export function initCoseTuner() {
   reset.addEventListener('click', () => {
     values = { ...defaults };
     saveValues();
-    panel.querySelectorAll('[data-cose-key]').forEach(input => { input.value = String(values[input.dataset.coseKey]); });
+    presetSelect.value = '';
+    syncFields();
     runLayout();
   });
   actions.append(apply, reset);
