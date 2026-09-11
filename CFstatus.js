@@ -35,12 +35,22 @@ function normalizeState(value)
   return STATES[state] ? state : 'unknown';
 }
 
+function timestamp()
+{
+  return new Date().toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
 function build(container)
 {
   container.replaceChildren();
   container.classList.add('cf-build-status');
-  container.setAttribute('role', 'status');
-  container.setAttribute('aria-live', 'polite');
+  container.setAttribute('role', 'button');
+  container.setAttribute('tabindex', '0');
+  container.setAttribute('aria-label', 'Open Cloudflare deployment activity');
   container.title = 'Cloudflare deployment status';
 
   const dot = document.createElement('span');
@@ -52,7 +62,34 @@ function build(container)
 
   container.append(dot, text);
 
-  return { container, dot, text };
+  const dialog = document.createElement('dialog');
+  dialog.className = 'status-log-dialog cf-status-dialog';
+
+  const header = document.createElement('div');
+  header.className = 'status-log-header';
+
+  const title = document.createElement('strong');
+  title.textContent = 'Cloudflare Activity';
+
+  const closeButton = document.createElement('button');
+  closeButton.type = 'button';
+  closeButton.textContent = '×';
+  closeButton.title = 'Close Cloudflare activity';
+
+  header.append(title, closeButton);
+
+  const log = document.createElement('div');
+  log.className = 'status-log';
+
+  dialog.append(header, log);
+  document.body.appendChild(dialog);
+
+  closeButton.addEventListener('click', () => dialog.close());
+  dialog.addEventListener('click', event => {
+    if (event.target === dialog) dialog.close();
+  });
+
+  return { container, dot, text, dialog, log };
 }
 
 export function createCFStatus(container, options = {})
@@ -61,12 +98,57 @@ export function createCFStatus(container, options = {})
 
   const config = { ...DEFAULTS, ...options };
   const view = build(container);
+  const history = [];
+  const maxHistory = 100;
   let state = 'checking';
   let previousState = null;
   let timer = null;
   let destroyed = false;
   let hasCompletedCheck = false;
   let lastErrorKey = null;
+
+  function renderHistory()
+  {
+    view.log.replaceChildren();
+
+    history.forEach(entry => {
+      const row = document.createElement('div');
+      row.className = 'status-log-entry';
+      row.dataset.level = entry.level;
+
+      const time = document.createElement('span');
+      time.className = 'status-log-time';
+      time.textContent = entry.time;
+
+      const message = document.createElement('span');
+      message.className = 'status-log-message';
+      message.textContent = entry.message;
+
+      row.append(time, message);
+      view.log.appendChild(row);
+    });
+  }
+
+  function addHistory(message, level = 'info')
+  {
+    if (!message) return;
+    history.unshift({ message, level, time: timestamp() });
+    if (history.length > maxHistory) history.pop();
+    renderHistory();
+  }
+
+  function openHistory()
+  {
+    renderHistory();
+    view.dialog.showModal();
+  }
+
+  view.container.addEventListener('click', openHistory);
+  view.container.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    openHistory();
+  });
 
   function render()
   {
@@ -76,23 +158,33 @@ export function createCFStatus(container, options = {})
     view.text.textContent = `CF: ${meta.label}`;
     view.container.dataset.status = state;
     view.container.title = state === 'unknown'
-      ? 'Cloudflare deployment status temporarily unavailable; monitoring will retry automatically'
-      : `Cloudflare deployment status: ${meta.label}`;
+      ? 'Cloudflare deployment status temporarily unavailable; click for activity'
+      : `Cloudflare deployment status: ${meta.label}; click for activity`;
   }
 
   function logStateChange(nextState)
   {
     if (previousState === nextState) return;
 
-    // Unknown/checking are useful in the compact CF display, but polling and
-    // transient endpoint failures should not add noise to the app status log.
+    const label = STATES[nextState]?.label || nextState;
+    const level = nextState === 'deployed'
+      ? 'success'
+      : nextState === 'failed' || nextState === 'unknown'
+        ? 'warn'
+        : 'info';
+
+    addHistory(`Cloudflare: ${label}`, level);
+
+    // Unknown/checking are useful in the compact CF display and its own
+    // history, but polling and transient endpoint failures should not add
+    // noise to the application's main status log.
     if (nextState === 'unknown' || nextState === 'checking')
     {
       previousState = nextState;
       return;
     }
 
-    const message = `Cloudflare: ${STATES[nextState]?.label || nextState}`;
+    const message = `Cloudflare: ${label}`;
 
     if (nextState === 'deployed')
       eBStatus.success(message);
@@ -118,6 +210,7 @@ export function createCFStatus(container, options = {})
     const key = String(error?.message || error || 'unknown error');
     if (key === lastErrorKey) return;
     lastErrorKey = key;
+    addHistory(`Monitor error: ${key}`, 'warn');
     console.warn('Unable to read Cloudflare deployment status; monitoring will retry:', error);
   }
 
@@ -169,6 +262,7 @@ export function createCFStatus(container, options = {})
       window.clearInterval(timer);
 
     timer = null;
+    view.dialog.remove();
   }
 
   render();
