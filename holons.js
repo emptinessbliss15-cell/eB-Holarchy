@@ -1,6 +1,15 @@
 export async function loadHolons(api)
 {
-  return api.model.load();
+  const model = await api.model.load();
+
+  window.dispatchEvent(new CustomEvent('eB:modelLoaded', {
+    detail: {
+      holons: model?.holons?.length || 0,
+      relationships: model?.relationships?.length || 0,
+    },
+  }));
+
+  return model;
 }
 
 export function childrenOf(holonId, holons, relationships, relationshipTypeId = null)
