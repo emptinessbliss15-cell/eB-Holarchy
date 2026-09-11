@@ -94,6 +94,8 @@ function injectIndicatorStyles()
     .eb-provenance-inspector-change { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 
     .eb-provenance-panel {
+      width: 100%;
+      box-sizing: border-box;
       padding: 0;
       border: 0;
       background: transparent;
@@ -458,8 +460,8 @@ function openReview()
 function ensureContainer()
 {
   if (container?.isConnected) return container;
-  const workspace = document.querySelector('.workspace-primary');
-  if (!workspace) return null;
+  const app = document.getElementById('app');
+  if (!app?.parentElement) return null;
 
   container = document.createElement('section');
   container.className = 'eb-provenance-panel';
@@ -481,7 +483,7 @@ function ensureContainer()
 
   button.append(label, count);
   container.appendChild(button);
-  workspace.parentElement?.insertBefore(container, workspace);
+  app.parentElement.insertBefore(container, app);
 
   reviewDialog = document.createElement('dialog');
   reviewDialog.className = 'eb-provenance-review-dialog';
