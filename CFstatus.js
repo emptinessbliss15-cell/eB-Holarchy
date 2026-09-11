@@ -71,12 +71,24 @@ function build(container)
   const title = document.createElement('strong');
   title.textContent = 'Cloudflare Activity';
 
+  const actions = document.createElement('div');
+  actions.style.display = 'flex';
+  actions.style.alignItems = 'center';
+  actions.style.gap = '8px';
+
+  const copyButton = document.createElement('button');
+  copyButton.type = 'button';
+  copyButton.textContent = 'Copy';
+  copyButton.title = 'Copy Cloudflare activity';
+  copyButton.style.fontSize = 'inherit';
+
   const closeButton = document.createElement('button');
   closeButton.type = 'button';
   closeButton.textContent = '×';
   closeButton.title = 'Close Cloudflare activity';
 
-  header.append(title, closeButton);
+  actions.append(copyButton, closeButton);
+  header.append(title, actions);
 
   const log = document.createElement('div');
   log.className = 'status-log';
@@ -89,7 +101,7 @@ function build(container)
     if (event.target === dialog) dialog.close();
   });
 
-  return { container, dot, text, dialog, log };
+  return { container, dot, text, dialog, log, copyButton };
 }
 
 export function createCFStatus(container, options = {})
@@ -106,6 +118,7 @@ export function createCFStatus(container, options = {})
   let destroyed = false;
   let hasCompletedCheck = false;
   let lastErrorKey = null;
+  let copyLabelTimer = null;
 
   function renderHistory()
   {
@@ -128,6 +141,60 @@ export function createCFStatus(container, options = {})
       view.log.appendChild(row);
     });
   }
+
+  function historyText()
+  {
+    return history
+      .slice()
+      .reverse()
+      .map(entry => `${entry.time}  ${entry.message}`)
+      .join('\n');
+  }
+
+  async function copyHistory()
+  {
+    const text = historyText();
+    if (!text) return;
+
+    try
+    {
+      if (navigator.clipboard?.writeText)
+      {
+        await navigator.clipboard.writeText(text);
+      }
+      else
+      {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        textarea.remove();
+      }
+
+      view.copyButton.textContent = 'Copied';
+      if (copyLabelTimer !== null) window.clearTimeout(copyLabelTimer);
+      copyLabelTimer = window.setTimeout(() => {
+        view.copyButton.textContent = 'Copy';
+        copyLabelTimer = null;
+      }, 1200);
+    }
+    catch (error)
+    {
+      console.warn('Unable to copy Cloudflare activity:', error);
+      view.copyButton.textContent = 'Copy failed';
+      if (copyLabelTimer !== null) window.clearTimeout(copyLabelTimer);
+      copyLabelTimer = window.setTimeout(() => {
+        view.copyButton.textContent = 'Copy';
+        copyLabelTimer = null;
+      }, 1600);
+    }
+  }
+
+  view.copyButton.addEventListener('click', () => void copyHistory());
 
   function addHistory(message, level = 'info')
   {
@@ -260,8 +327,11 @@ export function createCFStatus(container, options = {})
 
     if (timer !== null)
       window.clearInterval(timer);
+    if (copyLabelTimer !== null)
+      window.clearTimeout(copyLabelTimer);
 
     timer = null;
+    copyLabelTimer = null;
     view.dialog.remove();
   }
 
