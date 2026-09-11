@@ -9,6 +9,7 @@ const GRAPH_MIN_AUTO_ZOOM = 0.45;
 const GRAPH_MAX_AUTO_ZOOM = 1.25;
 const GRAPH_ATTACH_RETRY_MS = 50;
 const GRAPH_ATTACH_MAX_ATTEMPTS = 100;
+const FIELD_RELATIONSHIP_NAME = 'field of';
 let filter = null;
 let graphListenersInstalledFor = null;
 let graphAttachTimer = null;
@@ -26,9 +27,19 @@ function persistGraphRoot(rootId)
   }
 }
 
+function currentFilterValues()
+{
+  return filter?.values?.() || {};
+}
+
 function currentHolonType()
 {
-  return String(filter?.values?.().holonType || '').trim();
+  return String(currentFilterValues().holonType || '').trim();
+}
+
+function showFields()
+{
+  return currentFilterValues().fields === true;
 }
 
 function syncHolonTypeOptions(cy)
@@ -69,24 +80,40 @@ function syncHolonTypeOptions(cy)
   select.value = selected;
 }
 
-function applyHolonTypeFilter(cy, holonType = currentHolonType())
+function isFieldRelationship(edge)
+{
+  return String(edge?.data?.('label') || '').trim().toLowerCase() === FIELD_RELATIONSHIP_NAME;
+}
+
+function isFieldOnlyNode(node)
+{
+  const edges = node.connectedEdges();
+  return edges.length > 0 && edges.every(isFieldRelationship);
+}
+
+function applyGraphFilters(cy, values = currentFilterValues())
 {
   if (!cy) return;
-  const wanted = String(holonType || '').trim().toLowerCase();
+
+  const wantedType = String(values.holonType || '').trim().toLowerCase();
+  const fieldsVisible = values.fields === true;
 
   cy.batch(() =>
   {
     cy.nodes().forEach(node =>
     {
       const type = String(node.data('type') || '').trim().toLowerCase();
-      node.style('display', !wanted || type === wanted ? 'element' : 'none');
+      const typeMatches = !wantedType || type === wantedType;
+      const layerMatches = fieldsVisible || !isFieldOnlyNode(node);
+      node.style('display', typeMatches && layerMatches ? 'element' : 'none');
     });
 
     cy.edges().forEach(edge =>
     {
-      const visible = edge.source().style('display') !== 'none'
+      const layerMatches = fieldsVisible || !isFieldRelationship(edge);
+      const endpointsVisible = edge.source().style('display') !== 'none'
         && edge.target().style('display') !== 'none';
-      edge.style('display', visible ? 'element' : 'none');
+      edge.style('display', layerMatches && endpointsVisible ? 'element' : 'none');
     });
   });
 }
@@ -139,12 +166,12 @@ function installGraphListeners()
   cy.on('layoutstop', () =>
   {
     syncHolonTypeOptions(cy);
-    applyHolonTypeFilter(cy);
+    applyGraphFilters(cy);
     fitGraph(cy);
   });
 
   syncHolonTypeOptions(cy);
-  applyHolonTypeFilter(cy);
+  applyGraphFilters(cy);
 
   graphListenersInstalledFor = cy;
   return true;
@@ -187,6 +214,15 @@ function installControls()
         defaultValue: depth.value || '2',
       },
       {
+        name: 'fields',
+        label: 'Fields',
+        type: 'checkbox',
+        elementId: 'graphFields',
+        wrapperClass: 'holarchy-filter-prov',
+        ariaLabel: 'Show field schema',
+        defaultValue: false,
+      },
+      {
         name: 'provenance',
         label: 'Prov',
         type: 'checkbox',
@@ -209,10 +245,10 @@ function installControls()
     {
       if (!fieldName || fieldName === 'depth') setGraphDepth(values.depth || '2');
       if (!fieldName || fieldName === 'provenance') setShowProvenance(values.provenance === true);
-      if (!fieldName || fieldName === 'holonType')
+      if (!fieldName || fieldName === 'fields' || fieldName === 'holonType')
       {
         const cy = getHolonGraph();
-        applyHolonTypeFilter(cy, values.holonType);
+        applyGraphFilters(cy, values);
         fitGraph(cy);
       }
     },
