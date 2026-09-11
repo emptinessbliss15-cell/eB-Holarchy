@@ -177,23 +177,32 @@ function installGraphRelationshipDrop() {
 
   graph.on('grab', 'node', event => {
     draggedNodeId = String(event.target.id());
+    event.target.style('z-index', 9999);
   });
 
   graph.on('free', 'node', event => {
     const sourceId = draggedNodeId || String(event.target.id());
     draggedNodeId = null;
     const sourceNode = event.target;
-    const point = sourceNode.renderedPosition();
-    const tolerance = 14;
-    const targetNode = graph.nodes().filter(node => {
-      if (String(node.id()) === sourceId) return false;
-      const box = node.renderedBoundingBox({ includeLabels: false, includeOverlays: false });
-      return point.x >= box.x1 - tolerance && point.x <= box.x2 + tolerance
-        && point.y >= box.y1 - tolerance && point.y <= box.y2 + tolerance;
-    }).first();
+    const sourceBox = sourceNode.renderedBoundingBox({ includeLabels: false, includeOverlays: false });
+    let bestTarget = null;
+    let bestOverlap = 0;
 
-    if (!targetNode?.length) return;
-    createDroppedRelationship(sourceId, String(targetNode.id()));
+    graph.nodes().forEach(node => {
+      if (String(node.id()) === sourceId) return;
+      const box = node.renderedBoundingBox({ includeLabels: false, includeOverlays: false });
+      const overlapWidth = Math.max(0, Math.min(sourceBox.x2, box.x2) - Math.max(sourceBox.x1, box.x1));
+      const overlapHeight = Math.max(0, Math.min(sourceBox.y2, box.y2) - Math.max(sourceBox.y1, box.y1));
+      const overlap = overlapWidth * overlapHeight;
+      if (overlap > bestOverlap) {
+        bestOverlap = overlap;
+        bestTarget = node;
+      }
+    });
+
+    sourceNode.removeStyle('z-index');
+    if (!bestTarget || bestOverlap <= 0) return;
+    createDroppedRelationship(sourceId, String(bestTarget.id()));
   });
 }
 
