@@ -5,6 +5,7 @@ let current = null;
 let currentElement = null;
 let logElement = null;
 let dialogElement = null;
+let modelLoadedHandlerInstalled = false;
 
 function timestamp()
 {
@@ -81,6 +82,20 @@ function openLog()
   dialogElement?.showModal();
 }
 
+function installModelLoadedHandler()
+{
+  if (modelLoadedHandlerInstalled) return;
+
+  window.addEventListener('eB:modelLoaded', event =>
+  {
+    const holonCount = Number(event.detail?.holons) || 0;
+    const relationshipCount = Number(event.detail?.relationships) || 0;
+    addEntry(`${holonCount} Holons · ${relationshipCount} relationships`, 'info');
+  });
+
+  modelLoadedHandlerInstalled = true;
+}
+
 function build(container)
 {
   container.replaceChildren();
@@ -127,6 +142,7 @@ function build(container)
     if (event.target === dialogElement) closeLog();
   });
 
+  installModelLoadedHandler();
   renderCurrent();
   renderLog();
 }
