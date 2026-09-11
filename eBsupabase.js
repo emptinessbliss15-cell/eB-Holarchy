@@ -255,6 +255,75 @@ export function createEBSupabase()
     return createProvenance('import', JSON.stringify({ entity: 'bundle', operation: 'import', bundle: prepared }), null, source);
   }
 
+  function prepareHolonBundle(bundle)
+  {
+    if (bundle?.format !== 'eBliss Holon Bundle' || !bundle?.root) throw new Error('Invalid eBliss Holon Bundle');
+    const copy = JSON.parse(JSON.stringify(bundle));
+    const keys = new Set();
+    let count = 0;
+    const visit = node =>
+    {
+      if (!node?.key || !node?.name || !node?.type || !Array.isArray(node.children)) throw new Error('Bundle contains an invalid Holon');
+      if (keys.has(node.key)) throw new Error(`Duplicate bundle key: ${node.key}`);
+      keys.add(node.key);
+      node.id ||= crypto.randomUUID();
+      if (++count > 2000) throw new Error('Bundle exceeds the 2,000 Holon import limit');
+      node.children.forEach(child => { child.relationshipId ||= crypto.randomUUID(); visit(child); });
+    };
+    visit(copy.root);
+    return copy;
+  }
+
+  async function findOrCreateHolonType(name)
+  {
+    const existing = result('Holon type lookup', await supabase.from('holon_types').select('id').eq('name', name).maybeSingle());
+    return existing || result('Holon type', await supabase.from('holon_types').insert({ name, description: `Imported document ${name}` }).select('id').single());
+  }
+
+  async function findOrCreateRelationshipType(name)
+  {
+    const existing = result('Relationship type lookup', await supabase.from('relationship_types').select('id').eq('name', name).maybeSingle());
+    return existing || result('Relationship type', await supabase.from('relationship_types').insert({ name, inverse_name: 'contains', description: 'A document Holon is part of a parent document Holon.' }).select('id').single());
+  }
+
+  async function applyHolonBundle(bundle)
+  {
+    const nodes = [], edges = [];
+    const walk = (node, parent = null) =>
+    {
+      nodes.push(node);
+      if (parent) edges.push({ child: node, parent });
+      node.children.forEach(child => walk(child, node));
+    };
+    walk(bundle.root);
+    const typeNames = [...new Set(nodes.map(node => node.type))];
+    const typeRows = await Promise.all(typeNames.map(findOrCreateHolonType));
+    const typeIds = Object.fromEntries(typeNames.map((name, index) => [name, typeRows[index].id]));
+    const partOf = await findOrCreateRelationshipType('part of');
+    const holonRows = nodes.map(node => ({
+      id: node.id,
+      holon_type_id: typeIds[node.type],
+      name: node.name,
+      Content: JSON.stringify({ _legacyContent: node.content || '', _eBImport: { sourceKey: node.key, ...(node === bundle.root ? { source: bundle.source } : {}) } }),
+    }));
+    result('Imported Holons', await supabase.from('holons').upsert(holonRows, { onConflict: 'id' }));
+    if (edges.length) result('Imported relationships', await supabase.from('relationships').upsert(edges.map(({ child, parent }) => ({
+      id: child.relationshipId,
+      source_holon_id: child.id,
+      relationship_type_id: partOf.id,
+      target_holon_id: parent.id,
+      position: Number(child.position || 0),
+    })), { onConflict: 'id' }));
+    return bundle.root.id;
+  }
+
+  async function stageHolonBundle(bundle)
+  {
+    const prepared = prepareHolonBundle(bundle);
+    const source = `${prepared.source?.title || 'External source'} ${prepared.source?.version || ''}`.trim();
+    return createProvenance('import', JSON.stringify({ entity: 'bundle', operation: 'import', bundle: prepared }), null, source);
+  }
+
   async function createFieldDefinition(typeName, values = {})
   {
     const name = String(values.name ?? '').trim();

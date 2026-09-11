@@ -50,7 +50,6 @@ export function initSourceImports() {
       eBStatus.error(error?.message || `Unable to stage ${spec.label}`);
     }
   }));
-
   window.addEventListener('eB:modelChanged', refresh);
   window.addEventListener('eB:provenanceCreated', refresh);
   void refresh();
