@@ -11,6 +11,9 @@ let contextHandler = null;
 let grabHandler = null;
 let freeHandler = null;
 let draggedNodeId = null;
+let resizeObserver = null;
+let resizeFrame = 0;
+let windowResizeHandler = null;
 
 async function reverseRelationship(relationship) {
   if (!relationship?.id) return;
@@ -95,6 +98,31 @@ function overlapArea(a, b) {
   return width * height;
 }
 
+function scheduleGraphResize(graph) {
+  if (!graph) return;
+  cancelAnimationFrame(resizeFrame);
+  resizeFrame = requestAnimationFrame(() => {
+    graph.resize();
+    resizeFrame = requestAnimationFrame(() => graph.resize());
+  });
+}
+
+function installDimensionSync(graph) {
+  resizeObserver?.disconnect();
+  if (windowResizeHandler) window.removeEventListener('resize', windowResizeHandler);
+
+  const container = graph?.container?.();
+  if (!container) return;
+
+  resizeObserver = new ResizeObserver(() => scheduleGraphResize(graph));
+  resizeObserver.observe(container);
+  if (container.parentElement) resizeObserver.observe(container.parentElement);
+
+  windowResizeHandler = () => scheduleGraphResize(graph);
+  window.addEventListener('resize', windowResizeHandler, { passive: true });
+  scheduleGraphResize(graph);
+}
+
 function addReverseMenuItem(menu, relationship) {
   if (!menu || menu.querySelector('[data-eb-action="reverse-relationship"]')) return;
 
@@ -118,7 +146,11 @@ function addReverseMenuItem(menu, relationship) {
 
 function attach() {
   const graph = getHolonGraph();
-  if (!graph || graph === attachedGraph) return;
+  if (!graph) return;
+  if (graph === attachedGraph) {
+    scheduleGraphResize(graph);
+    return;
+  }
 
   if (attachedGraph) {
     if (contextHandler) attachedGraph.off('cxttap', 'edge', contextHandler);
@@ -169,6 +201,7 @@ function attach() {
   graph.on('grab', 'node', grabHandler);
   graph.on('free', 'node', freeHandler);
   attachedGraph = graph;
+  installDimensionSync(graph);
 }
 
 export function initRelationshipContext() {
