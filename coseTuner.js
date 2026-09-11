@@ -44,11 +44,21 @@ function runLayout() {
   cy.layout({ name: 'cose', animate: false, fit: true, padding: 40, randomize: true, ...values }).run();
 }
 
-function field(label, key, min, max, step = 1) {
+function field(label, key, min, max, step = 1, help = '') {
   const row = document.createElement('label');
   row.className = 'eb-cose-row';
   const caption = document.createElement('span');
-  caption.textContent = label;
+  caption.className = 'eb-cose-caption';
+  caption.append(document.createTextNode(label));
+  if (help) {
+    const info = document.createElement('span');
+    info.className = 'eb-cose-info';
+    info.textContent = 'i';
+    info.title = help;
+    info.setAttribute('aria-label', `${label}: ${help}`);
+    info.tabIndex = 0;
+    caption.append(info);
+  }
   const input = document.createElement('input');
   input.type = 'number';
   input.min = String(min);
@@ -77,6 +87,9 @@ function installStyles() {
     .eb-cose-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; font-weight:700; }
     .eb-cose-head button { border:0; background:transparent; color:inherit; cursor:pointer; font-size:16px; }
     .eb-cose-row { display:grid; grid-template-columns:minmax(0,1fr) 86px; align-items:center; gap:8px; margin:5px 0; font-size:11px; }
+    .eb-cose-caption { display:flex; align-items:center; gap:5px; min-width:0; }
+    .eb-cose-info { display:inline-flex; align-items:center; justify-content:center; flex:0 0 14px; width:14px; height:14px; border:1px solid currentColor; border-radius:50%; opacity:.65; font-size:9px; font-weight:700; font-style:normal; line-height:1; cursor:help; }
+    .eb-cose-info:hover, .eb-cose-info:focus { opacity:1; outline:none; }
     .eb-cose-row input { width:100%; box-sizing:border-box; padding:3px 5px; border:1px solid var(--eb-border,#aaa); border-radius:4px; background:var(--eb-bg,#fff); color:var(--eb-text,#222); }
     .eb-cose-presets { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px; margin-bottom:9px; }
     .eb-cose-presets select { min-width:0; padding:4px 5px; border:1px solid var(--eb-border,#aaa); border-radius:4px; background:var(--eb-bg,#fff); color:var(--eb-text,#222); }
@@ -142,15 +155,15 @@ export function initCoseTuner() {
   panel.appendChild(presetControls);
 
   const fields = [
-    ['Node repulsion', 'nodeRepulsion', 0, 2000000, 10000],
-    ['Ideal edge length', 'idealEdgeLength', 10, 500, 5],
-    ['Edge elasticity', 'edgeElasticity', 1, 1000, 5],
-    ['Nesting factor', 'nestingFactor', 0, 20, 0.5],
-    ['Gravity', 'gravity', 0, 500, 5],
-    ['Iterations', 'numIter', 10, 10000, 50],
-    ['Initial temp', 'initialTemp', 1, 1000, 10],
-    ['Cooling factor', 'coolingFactor', 0.01, 0.999, 0.01],
-    ['Minimum temp', 'minTemp', 0.01, 100, 0.1],
+    ['Node repulsion', 'nodeRepulsion', 0, 2000000, 10000, 'How strongly nodes push apart. Higher values create more space between nodes.'],
+    ['Ideal edge length', 'idealEdgeLength', 10, 500, 5, 'The preferred distance between connected nodes. Higher values make edges longer.'],
+    ['Edge elasticity', 'edgeElasticity', 1, 1000, 5, 'How strongly edges resist being stretched. Higher values pull connected nodes toward their ideal distance more firmly.'],
+    ['Nesting factor', 'nestingFactor', 0, 20, 0.5, 'Adds extra spacing for compound or nested nodes. Higher values spread nested levels farther apart.'],
+    ['Gravity', 'gravity', 0, 500, 5, 'Pulls disconnected or distant nodes toward the graph center. Higher values make the layout more compact.'],
+    ['Iterations', 'numIter', 10, 10000, 50, 'Maximum layout calculation steps. More iterations may improve settling but take longer.'],
+    ['Initial temp', 'initialTemp', 1, 1000, 10, 'How freely nodes can move when layout begins. Higher values allow larger early movements.'],
+    ['Cooling factor', 'coolingFactor', 0.01, 0.999, 0.01, 'How gradually movement slows. Values nearer 1 cool more slowly and explore longer.'],
+    ['Minimum temp', 'minTemp', 0.01, 100, 0.1, 'The movement threshold for stopping. Lower values let the layout settle more precisely.'],
   ];
   fields.forEach(args => panel.appendChild(field(...args)));
 
