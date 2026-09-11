@@ -6,6 +6,7 @@ export async function loadHolons(api)
     detail: {
       holons: model?.holons?.length || 0,
       relationships: model?.relationships?.length || 0,
+      model,
     },
   }));
 
