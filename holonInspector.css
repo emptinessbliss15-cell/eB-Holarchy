@@ -4,6 +4,15 @@
   align-items: stretch;
 }
 
+.workspace-primary.inspector-hidden {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.workspace-primary.inspector-hidden .holon-inspector,
+.holon-inspector[hidden] {
+  display: none !important;
+}
+
 .holon-inspector {
   min-height: 0 !important;
   height: 100%;
@@ -12,7 +21,25 @@
   overflow: hidden;
 }
 
-.holon-inspector > .panel-heading { flex: 0 0 auto; }
+.holon-inspector > .panel-heading {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.holon-inspector-pin {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--eb-border-strong);
+  border-radius: 5px;
+  background: var(--eb-input-bg);
+  color: var(--eb-text);
+  cursor: pointer;
+}
 
 #holonInspectorContent {
   flex: 1 1 auto;
