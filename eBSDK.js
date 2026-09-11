@@ -31,6 +31,10 @@ export function createEBlissSDK(backend)
     delete(relationshipId) { return commit(() => backend.relationships.delete(relationshipId)); },
   });
 
+  const imports = Object.freeze({
+    stage(bundle) { return backend.imports.stage(bundle); },
+  });
+
   return Object.freeze({
     auth: backend.auth,
     model: backend.model,
@@ -38,6 +42,7 @@ export function createEBlissSDK(backend)
     holonTypes: backend.holonTypes,
     relationshipTypes: backend.relationshipTypes,
     relationships,
+    imports,
     fieldDefinitions: backend.fieldDefinitions,
     changes: backend.changes,
     profile: backend.profile,
