@@ -112,6 +112,16 @@ function render() {
   if (selectedId) selectHolon(selectedId, { fromGraph: true });
 }
 
+function alignDocumentPanel() {
+  const workspace = document.querySelector('.workspace-primary');
+  const graphPanel = workspace?.querySelector('.panel-graph');
+  const graphCanvas = document.getElementById('holonGraph');
+  const documentPanel = document.getElementById('documentViewer');
+  if (!workspace || !graphPanel || !graphCanvas || !documentPanel) return;
+  const shouldAlign = workspace.dataset.view === 'split' && window.matchMedia('(min-width: 761px)').matches;
+  documentPanel.style.marginTop = shouldAlign ? `${Math.max(0, graphCanvas.offsetTop - graphPanel.offsetTop)}px` : '0px';
+}
+
 function setView(view) {
   const workspace = document.querySelector('.workspace-primary');
   const graph = workspace?.querySelector('.panel-graph');
@@ -127,6 +137,7 @@ function setView(view) {
     button.setAttribute('aria-pressed', String(active));
   });
   store(VIEW_KEY, next);
+  requestAnimationFrame(alignDocumentPanel);
   if (next !== 'document') setTimeout(() => getHolonGraph()?.resize?.(), 0);
 }
 
@@ -146,6 +157,8 @@ export function initDocumentViewer() {
   window.addEventListener('eB:graphRootChanged', () => render());
   window.addEventListener('eB:modelLoaded', event => { if (event.detail?.model) void refreshModel(event.detail.model); });
   window.addEventListener('eB:modelChanged', () => void refreshModel());
+  window.addEventListener('resize', alignDocumentPanel);
+  if ('ResizeObserver' in window) new ResizeObserver(alignDocumentPanel).observe(document.querySelector('.panel-graph'));
   setView(stored(VIEW_KEY, 'split'));
   void refreshModel();
 }
