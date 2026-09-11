@@ -65,7 +65,8 @@ export function createCFStatus(container, options = {})
   let previousState = null;
   let timer = null;
   let destroyed = false;
-  let endpointUnavailable = false;
+  let hasCompletedCheck = false;
+  let lastErrorKey = null;
 
   function render()
   {
@@ -74,16 +75,18 @@ export function createCFStatus(container, options = {})
     view.dot.textContent = meta.symbol;
     view.text.textContent = `CF: ${meta.label}`;
     view.container.dataset.status = state;
-    view.container.title = `Cloudflare deployment status: ${meta.label}`;
+    view.container.title = state === 'unknown'
+      ? 'Cloudflare deployment status temporarily unavailable; monitoring will retry automatically'
+      : `Cloudflare deployment status: ${meta.label}`;
   }
 
   function logStateChange(nextState)
   {
     if (previousState === nextState) return;
 
-    // Unknown is useful in the CFstatus display, but it is not
-    // meaningful enough to add noise to the application status log.
-    if (nextState === 'unknown')
+    // Unknown/checking are useful in the compact CF display, but polling and
+    // transient endpoint failures should not add noise to the app status log.
+    if (nextState === 'unknown' || nextState === 'checking')
     {
       previousState = nextState;
       return;
@@ -110,11 +113,21 @@ export function createCFStatus(container, options = {})
     return state;
   }
 
+  function reportReadError(error)
+  {
+    const key = String(error?.message || error || 'unknown error');
+    if (key === lastErrorKey) return;
+    lastErrorKey = key;
+    console.warn('Unable to read Cloudflare deployment status; monitoring will retry:', error);
+  }
+
   async function refresh()
   {
-    if (destroyed || endpointUnavailable) return;
+    if (destroyed) return;
 
-    setState('checking');
+    // Show checking only for the initial request. During normal polling retain
+    // the last useful state so the badge does not flicker every 15 seconds.
+    if (!hasCompletedCheck) setState('checking');
 
     try
     {
@@ -124,22 +137,18 @@ export function createCFStatus(container, options = {})
         headers: { Accept: 'application/json' },
       });
 
-      if (response.status === 404)
-      {
-        endpointUnavailable = true;
-        setState('unknown');
-        return;
-      }
-
       if (!response.ok)
         throw new Error(`CF status endpoint returned ${response.status}`);
 
       const data = await response.json();
+      hasCompletedCheck = true;
+      lastErrorKey = null;
       setState(data.status ?? data.state ?? data.phase);
     }
     catch (error)
     {
-      console.warn('Unable to read Cloudflare deployment status:', error);
+      hasCompletedCheck = true;
+      reportReadError(error);
       setState('unknown');
     }
   }
@@ -148,7 +157,7 @@ export function createCFStatus(container, options = {})
   {
     refresh();
 
-    if (config.pollInterval > 0)
+    if (config.pollInterval > 0 && timer === null)
       timer = window.setInterval(refresh, config.pollInterval);
   }
 
