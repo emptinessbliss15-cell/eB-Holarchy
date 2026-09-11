@@ -359,7 +359,7 @@ function installContextMenu() {
       const button = document.createElement('button');
       button.type = 'button'; button.textContent = label; button.setAttribute('role', 'menuitem');
       if (danger) button.classList.add('danger');
-      button.addEventListener('click', () => { closeContextMenu(); action(); });
+      button.addEventListener('click', event => { closeContextMenu(); action(event); });
       menu.appendChild(button);
     };
     const separator = () => { const line = document.createElement('div'); line.className = 'context-separator'; menu.appendChild(line); };
@@ -375,7 +375,10 @@ function installContextMenu() {
       add('Delete Holon', () => window.dispatchEvent(new CustomEvent('holon:contextdelete', { detail: { holon } })), true);
     } else if (kind === 'edge' && relationship) {
       add('Inspect Relationship', () => window.dispatchEvent(new CustomEvent('relationship:selected', { detail: relationship })));
-      add('Delete Relationship', () => window.dispatchEvent(new CustomEvent('relationship:contextdelete', { detail: { relationship } })), true);
+      add('Delete Relationship', event => {
+        if (!container.hasAttribute('tabindex')) container.tabIndex = -1;
+        window.dispatchEvent(new CustomEvent('relationship:contextdelete', { detail: { relationship, x: event.detail ? event.clientX : x, y: event.detail ? event.clientY : y, returnFocus: container } }));
+      }, true);
     } else {
       add('New Holon', () => window.dispatchEvent(new CustomEvent('holon:contextcreate')));
     }
