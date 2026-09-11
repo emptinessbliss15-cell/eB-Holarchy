@@ -308,6 +308,14 @@ function humanizeChange(change)
 {
   const details = parseChange(change?.provenance?.changes);
   if (!details) return prettyChanges(change?.provenance?.changes);
+  if (details.entity === 'bundle' && details.operation === 'import')
+  {
+    let count = 0;
+    const visit = node => { count += 1; (node?.children || []).forEach(visit); };
+    visit(details.bundle?.root);
+    const source = details.bundle?.source || {};
+    return `Import ${details.bundle?.root?.name || 'Holon bundle'}${source.version ? ` v${source.version}` : ''}\n${count} Holons · ${source.license || 'license not specified'}\n${source.url || ''}`;
+  }
   const values = details.values || {};
   const entries = Object.entries(values);
   const entity = details.entity === 'relationship' ? 'Relationship' : 'Holon';
@@ -350,7 +358,7 @@ function renderProvInspector(panel)
     item.className = 'eb-provenance-inspector-item';
     const title = document.createElement('div');
     title.className = 'eb-provenance-inspector-title';
-    title.textContent = details?.operation === 'update' ? 'Holon updated' : `Holon ${details?.operation || 'changed'}`;
+    title.textContent = details?.entity === 'bundle' ? 'Holon bundle import' : details?.operation === 'update' ? 'Holon updated' : `Holon ${details?.operation || 'changed'}`;
     const meta = document.createElement('div');
     meta.className = 'eb-provenance-inspector-meta';
     const p = change.provenance || {};
@@ -566,7 +574,7 @@ async function render()
       card.className = 'eb-provenance-item';
       const p = change.provenance || {};
       const details = parseChange(p.changes);
-      const entity = details?.entity === 'relationship' ? 'Relationship' : 'Holon';
+      const entity = details?.entity === 'relationship' ? 'Relationship' : details?.entity === 'bundle' ? 'Holon bundle' : 'Holon';
       const operation = details?.operation ? details.operation[0].toUpperCase() + details.operation.slice(1) : 'Change';
 
       const title = document.createElement('div');
@@ -587,7 +595,9 @@ async function render()
       detailsSummary.textContent = 'Raw change';
       const raw = document.createElement('pre');
       raw.className = 'eb-provenance-changes';
-      raw.textContent = prettyChanges(p.changes);
+      raw.textContent = details?.entity === 'bundle'
+        ? prettyChanges({ format: details.bundle?.format, formatVersion: details.bundle?.formatVersion, source: details.bundle?.source, root: details.bundle?.root?.name })
+        : prettyChanges(p.changes);
       detailsElement.append(detailsSummary, raw);
 
       const actions = document.createElement('div');
