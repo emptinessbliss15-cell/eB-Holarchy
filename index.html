@@ -70,7 +70,7 @@
         <div id="status"></div>
         <main class="eb-main">
             <section id="app" class="card" hidden>
-                <div class="workspace-grid workspace-grids"><section class="panel holons-panel"><div class="panel-heading"><h3>Holons</h3><div class="panel-actions"><button id="newHolon" type="button">+ Holon</button><button id="newRelationship" type="button">+ Relationship</button><button id="newHolonType" type="button">+ Type</button><button id="newRelationshipType" type="button">+ Rel Type</button></div></div><div id="grid" aria-label="Holons"></div></section></div>
+                <div class="workspace-grid workspace-grids"><section class="panel holons-panel"><div class="panel-heading"><h3>Holons</h3><div class="panel-actions"><button id="importHolacracy" type="button">Import Holacracy</button><button id="newHolon" type="button">+ Holon</button><button id="newRelationship" type="button">+ Relationship</button><button id="newHolonType" type="button">+ Type</button><button id="newRelationshipType" type="button">+ Rel Type</button></div></div><div id="grid" aria-label="Holons"></div></section></div>
                 <div class="workspace-grid workspace-primary">
                     <section class="panel panel-graph"><div class="panel-heading holarchy-heading"><h3>Holarchy</h3><div class="holarchy-filter" role="group" aria-label="Holarchy filters"><div class="holarchy-filter-field"><span>Root</span><input id="graphRoot" type="text" autocomplete="off" aria-label="Holarchy graph root" placeholder="Choose a root Holon…"></div><div class="holarchy-filter-field"><span>Depth</span><select id="graphDepth" aria-label="Holarchy graph depth"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option><option value="all">∞</option></select></div><div class="holarchy-filter-prov"><input id="graphProvenance" type="checkbox" aria-label="Show provenance"><label for="graphProvenance">Prov</label></div></div></div><div id="holonGraph" aria-label="Holon relationship graph"></div></section>
                     <aside id="holonInspector" class="panel holon-inspector" aria-label="Object properties"><div class="panel-heading"><h3>Object Properties</h3></div><div id="holonInspectorContent" class="muted">Select an object to inspect its properties.</div></aside>
@@ -102,6 +102,7 @@
         await import('./eBSettings.js').then(({ initSettings }) => initSettings());
         await import('./eBProvenance.js').then(({ initProvenance }) => initProvenance());
         await import('./eBProvenanceHistory.js').then(({ initProvenanceHistory }) => initProvenanceHistory());
+        await import('./sourceImports.js').then(({ initSourceImports }) => initSourceImports());
         window.dispatchEvent(new CustomEvent('features:loaded'));
     </script>
 </body>
