@@ -95,28 +95,34 @@ function injectIndicatorStyles()
 
     .eb-provenance-panel {
       width: 100%;
+      min-height: 34px;
       box-sizing: border-box;
-      padding: 0;
-      border: 0;
-      background: transparent;
+      display: flex;
+      align-items: center;
+      padding: 4px 12px;
+      border-bottom: 1px solid var(--eb-border);
+      background: var(--eb-surface);
       box-shadow: none;
     }
     .eb-provenance-current {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      min-height: 28px;
-      padding: 4px 9px;
-      border: 1px solid currentColor;
-      border-radius: 6px;
+      gap: 8px;
+      min-width: 0;
+      min-height: 26px;
+      padding: 3px 6px;
+      border: 0;
+      border-radius: 4px;
       background: transparent;
       color: inherit;
       font: inherit;
+      text-align: left;
       cursor: pointer;
       opacity: .82;
     }
-    .eb-provenance-current:hover { opacity: 1; }
-    .eb-provenance-current[hidden] { display: none; }
+    .eb-provenance-current:hover:not(:disabled) { opacity: 1; background: var(--eb-hover); }
+    .eb-provenance-current:disabled { cursor: default; opacity: .62; }
+    .eb-provenance-current-label { font-weight: 600; }
     .eb-provenance-count {
       display: inline-flex;
       align-items: center;
@@ -465,17 +471,17 @@ function ensureContainer()
 
   container = document.createElement('section');
   container.className = 'eb-provenance-panel';
+  container.setAttribute('aria-label', 'Provenance');
 
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'eb-provenance-current';
-  button.hidden = true;
   button.title = 'Review pending changes';
   button.addEventListener('click', openReview);
 
   const label = document.createElement('span');
   label.className = 'eb-provenance-current-label';
-  label.textContent = 'Pending';
+  label.textContent = 'Provenance';
 
   const count = document.createElement('span');
   count.className = 'eb-provenance-count';
@@ -520,9 +526,10 @@ function setPendingCount(count)
   const button = container?.querySelector('.eb-provenance-current');
   const countText = container?.querySelector('.eb-provenance-count > span');
   if (!button || !countText) return;
-  button.hidden = count === 0;
   countText.textContent = String(count);
-  button.setAttribute('aria-label', `${count} pending change${count === 1 ? '' : 's'}`);
+  button.disabled = count === 0;
+  button.title = count ? 'Review pending changes' : 'No pending changes';
+  button.setAttribute('aria-label', `Provenance: ${count} pending change${count === 1 ? '' : 's'}`);
 }
 
 function setActionBusy(card, action, busy)
