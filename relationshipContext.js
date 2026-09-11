@@ -8,6 +8,7 @@ import { showModal } from './eBModal.js';
 
 let attachedGraph = null;
 let contextHandler = null;
+let nodeContextHandler = null;
 let grabHandler = null;
 let freeHandler = null;
 let draggedNodeId = null;
@@ -34,6 +35,86 @@ async function reverseRelationship(relationship) {
     eBStatus.success('Relationship reversed');
   } catch (error) {
     eBStatus.error(error?.message || 'Unable to reverse relationship');
+  }
+}
+
+function sortedHolonOptions(holons) {
+  return holons
+    .filter(holon => String(holon.holon_type || '').toLowerCase() !== 'provenance')
+    .map(holon => ({ value: holon.id, label: holon.name || '(unnamed)' }))
+    .sort((a, b) => String(a.label).localeCompare(String(b.label), undefined, { sensitivity: 'base' }));
+}
+
+function sortedRelationshipTypeOptions(relationshipTypes) {
+  return relationshipTypes
+    .map(type => ({ value: type.id, label: type.name || '(unnamed)' }))
+    .sort((a, b) => String(a.label).localeCompare(String(b.label), undefined, { sensitivity: 'base' }));
+}
+
+async function createContextRelationship(sourceId) {
+  if (!sourceId) return;
+
+  let model;
+  try {
+    model = await eBliss.model.load();
+  } catch (error) {
+    eBStatus.error(error?.message || 'Unable to load relationship data');
+    return;
+  }
+
+  const holons = model?.holons || [];
+  const relationshipTypes = model?.relationshipTypes || [];
+  const source = holons.find(item => String(item.id) === String(sourceId));
+  if (!source) return;
+  if (holons.length < 2 || !relationshipTypes.length) {
+    eBStatus.warn('Need at least two Holons and one relationship type');
+    return;
+  }
+
+  const holonOptions = sortedHolonOptions(holons);
+  const values = await showModal({
+    title: 'New Relationship',
+    submitLabel: 'Create Relationship',
+    fields: [
+      {
+        name: 'source_holon_id',
+        label: 'Source Holon',
+        type: 'select',
+        options: holonOptions,
+        value: source.id,
+        required: true,
+      },
+      {
+        name: 'relationship_type_id',
+        label: 'Relationship',
+        type: 'select',
+        options: sortedRelationshipTypeOptions(relationshipTypes),
+        required: true,
+      },
+      {
+        name: 'target_holon_id',
+        label: 'Target Holon',
+        type: 'select',
+        options: holonOptions,
+        required: true,
+      },
+      { name: 'position', label: 'Position', type: 'number', value: '0' },
+    ],
+  });
+
+  if (!values) return;
+  eBStatus.info('Creating relationship…');
+  try {
+    await eBliss.relationships.create({
+      source_holon_id: values.source_holon_id,
+      relationship_type_id: values.relationship_type_id,
+      target_holon_id: values.target_holon_id,
+      position: Number(values.position) || 0,
+    });
+    eBStatus.success('Relationship created');
+    window.dispatchEvent(new CustomEvent('eB:modelChanged'));
+  } catch (error) {
+    eBStatus.error(error?.message || 'Unable to create relationship');
   }
 }
 
@@ -66,9 +147,7 @@ async function createDroppedRelationship(sourceId, targetId) {
         name: 'relationship_type_id',
         label: 'Relationship',
         type: 'select',
-        options: relationshipTypes
-          .map(type => ({ value: type.id, label: type.name || '(unnamed)' }))
-          .sort((a, b) => String(a.label).localeCompare(String(b.label))),
+        options: sortedRelationshipTypeOptions(relationshipTypes),
         required: true,
       },
       { name: 'position', label: 'Position', type: 'number', value: '0' },
@@ -144,6 +223,23 @@ function addReverseMenuItem(menu, relationship) {
   else menu.appendChild(button);
 }
 
+function replaceNodeRelationshipMenuAction(menu, sourceId) {
+  if (!menu || !sourceId) return;
+  const original = [...menu.querySelectorAll('button')]
+    .find(item => item.textContent?.trim() === 'New Relationship');
+  if (!original || original.dataset.ebContextSource === String(sourceId)) return;
+
+  const replacement = original.cloneNode(true);
+  replacement.dataset.ebContextSource = String(sourceId);
+  replacement.addEventListener('click', event => {
+    event.preventDefault();
+    event.stopPropagation();
+    menu.remove();
+    void createContextRelationship(sourceId);
+  });
+  original.replaceWith(replacement);
+}
+
 function attach() {
   const graph = getHolonGraph();
   if (!graph) return;
@@ -154,6 +250,7 @@ function attach() {
 
   if (attachedGraph) {
     if (contextHandler) attachedGraph.off('cxttap', 'edge', contextHandler);
+    if (nodeContextHandler) attachedGraph.off('cxttap', 'node', nodeContextHandler);
     if (grabHandler) attachedGraph.off('grab', 'node', grabHandler);
     if (freeHandler) attachedGraph.off('free', 'node', freeHandler);
   }
@@ -164,6 +261,14 @@ function attach() {
 
     // holonGraph creates its base menu first; extend that same menu.
     queueMicrotask(() => addReverseMenuItem(document.querySelector('.holon-context-menu'), relationship));
+  };
+
+  nodeContextHandler = event => {
+    const sourceId = event.target?.data?.('holonId') ?? event.target?.id?.();
+    if (!sourceId) return;
+
+    // holonGraph creates the base node menu; replace only its relationship action.
+    queueMicrotask(() => replaceNodeRelationshipMenuAction(document.querySelector('.holon-context-menu'), sourceId));
   };
 
   grabHandler = event => {
@@ -198,6 +303,7 @@ function attach() {
   };
 
   graph.on('cxttap', 'edge', contextHandler);
+  graph.on('cxttap', 'node', nodeContextHandler);
   graph.on('grab', 'node', grabHandler);
   graph.on('free', 'node', freeHandler);
   attachedGraph = graph;
