@@ -67,6 +67,9 @@ button { cursor: pointer; }
 .eb-navigation { display: grid; grid-template-columns: 280px minmax(0,1fr); min-height: calc(100vh - 83px); }
 .eb-tree { padding: 12px; border-right: 1px solid var(--eb-border); background: var(--eb-surface); overflow: auto; }
 .eb-main { min-width: 0; padding: 12px; }
+.eb-main > .eb-status,
+.eb-main > .eb-provenance-panel { margin-bottom: 12px; }
+.eb-main > .eb-status { border: 1px solid var(--eb-border); border-radius: 7px; }
 .card { border: 1px solid var(--eb-border); border-radius: 8px; background: var(--eb-surface); color: var(--eb-text); padding: 14px; }
 .workspace-grid { display: grid; grid-template-columns: minmax(240px,360px) minmax(0,1fr); gap: 18px; }
 .panel-graph { grid-column: 1 / -1; }
@@ -75,6 +78,8 @@ button { cursor: pointer; }
 .workspace-primary[data-view="split"] > .holon-inspector { display: none !important; }
 .workspace-primary[data-view="document"] { grid-template-columns: minmax(0,1fr) minmax(280px,360px); }
 .panel-document { min-width: 0; height: var(--eb-workspace-pane-height, 460px); overflow: hidden; display: flex; flex-direction: column; }
+.panel-document[hidden],
+.panel-graph[hidden] { display: none !important; }
 .panel-document > .panel-heading { margin-bottom: 0; padding-bottom: 8px; border-bottom: 1px solid var(--eb-border); }
 .eb-document-content { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 12px 18px 40px; scroll-behavior: smooth; }
 .eb-document-content h1 { margin: 0 0 1.2rem; font-size: 1.65rem; }

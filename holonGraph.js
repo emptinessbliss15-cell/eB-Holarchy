@@ -219,21 +219,28 @@ function relationshipLabel(relationship, relationshipTypes) {
 function relatedWithinDepth(rootId, holons, relationships) {
   if (!rootId) return holons;
   const root = String(rootId);
-  if (!holons.some(holon => String(holon.id) === root)) return [];
+  const holonIds = new Set(holons.map(holon => String(holon.id)));
+  if (!holonIds.has(root)) return [];
+  const neighbors = new Map();
+  const connect = (from, to) => {
+    if (!neighbors.has(from)) neighbors.set(from, []);
+    neighbors.get(from).push(to);
+  };
+  for (const relationship of relationships) {
+    const source = String(relationship.source_holon_id ?? '');
+    const target = String(relationship.target_holon_id ?? '');
+    if (!source || !target) continue;
+    connect(source, target);
+    connect(target, source);
+  }
   const distance = new Map([[root, 0]]);
   const queue = [root];
-  while (queue.length) {
-    const current = queue.shift();
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const current = queue[cursor];
     const depth = distance.get(current);
     if (currentDepth !== 'all' && depth >= Number(currentDepth)) continue;
-    for (const relationship of relationships) {
-      const source = String(relationship.source_holon_id ?? '');
-      const target = String(relationship.target_holon_id ?? '');
-      let neighbor = null;
-      if (source === current) neighbor = target;
-      else if (target === current) neighbor = source;
-      if (!neighbor || distance.has(neighbor)) continue;
-      if (!holons.some(holon => String(holon.id) === neighbor)) continue;
+    for (const neighbor of neighbors.get(current) || []) {
+      if (distance.has(neighbor) || !holonIds.has(neighbor)) continue;
       distance.set(neighbor, depth + 1);
       queue.push(neighbor);
     }
@@ -480,8 +487,9 @@ export function createHolonGraph({ element, holons = [], relationships = [], rel
   return cy;
 }
 
-export function updateHolonGraph({ holons = [], relationships = [], relationshipTypes = [] } = {}) {
+export function updateHolonGraph({ holons = [], relationships = [], relationshipTypes = [], rootId } = {}) {
   currentModel = { holons, relationships, relationshipTypes };
+  if (rootId !== undefined) currentRootId = rootId ? String(rootId) : null;
   render();
 }
 

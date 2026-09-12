@@ -1,6 +1,9 @@
+let lastLoadedModel = null;
+
 export async function loadHolons(api)
 {
   const model = await api.model.load();
+  lastLoadedModel = model;
 
   window.dispatchEvent(new CustomEvent('eB:modelLoaded', {
     detail: {
@@ -12,6 +15,8 @@ export async function loadHolons(api)
 
   return model;
 }
+
+export function getLoadedModel() { return lastLoadedModel; }
 
 export function childrenOf(holonId, holons, relationships, relationshipTypeId = null)
 {

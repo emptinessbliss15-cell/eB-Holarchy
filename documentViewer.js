@@ -1,5 +1,6 @@
 import { eBliss } from './eBSDK.js';
 import { getHolonGraph } from './holonGraph.js';
+import { getLoadedModel } from './holons.js';
 
 const VIEW_KEY = 'eB-Holarchy.workspaceView';
 const ROOT_KEY = 'eB-Holarchy.graphRoot';
@@ -93,6 +94,8 @@ function selectHolon(id, { fromGraph = false } = {}) {
 }
 
 function render() {
+  const viewer = document.getElementById('documentViewer');
+  if (viewer?.hidden) return;
   const content = document.getElementById('documentViewerContent');
   const title = document.getElementById('documentViewerTitle');
   if (!content || !title) return;
@@ -144,6 +147,7 @@ function setView(view) {
     button.setAttribute('aria-pressed', String(active));
   });
   store(VIEW_KEY, next);
+  if (!documentPanel.hidden) render();
   requestAnimationFrame(alignDocumentPanel);
   if (next !== 'document') setTimeout(() => getHolonGraph()?.resize?.(), 0);
 }
@@ -167,5 +171,7 @@ export function initDocumentViewer() {
   window.addEventListener('resize', alignDocumentPanel);
   if ('ResizeObserver' in window) new ResizeObserver(alignDocumentPanel).observe(document.querySelector('.panel-graph'));
   setView(stored(VIEW_KEY, 'split'));
-  void refreshModel();
+  const loaded = getLoadedModel();
+  if (loaded) void refreshModel(loaded);
+  else if (!document.getElementById('documentViewer')?.hidden) void refreshModel();
 }
