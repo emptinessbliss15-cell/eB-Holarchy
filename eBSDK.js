@@ -9,25 +9,25 @@ export function createEBlissSDK(backend)
   // approval step. Later RBAC/holarchy authority can decide this per action.
   const requiresApproval = () => false;
 
-  const commit = async operation =>
+  const commit = async (operation, resolveApplied = null) =>
   {
     const provenance = await operation();
     if (!provenance?.id || requiresApproval()) return provenance;
-    await backend.changes.approve(provenance.id);
-    return provenance;
+    const approved = await backend.changes.approve(provenance.id);
+    return resolveApplied ? resolveApplied(approved) : approved;
   };
 
   const holons = Object.freeze({
-    create(values) { return commit(() => backend.holons.create(values)); },
+    create(values) { return commit(() => backend.holons.create(values), approved => backend.holons.get(approved.appliedTargetId)); },
     get(holonId) { return backend.holons.get(holonId); },
-    update(holonId, values) { return commit(() => backend.holons.update(holonId, values)); },
+    update(holonId, values) { return commit(() => backend.holons.update(holonId, values), () => backend.holons.get(holonId)); },
     delete(holonId) { return commit(() => backend.holons.delete(holonId)); },
   });
 
   const relationships = Object.freeze({
-    create(values) { return commit(() => backend.relationships.create(values)); },
+    create(values) { return commit(() => backend.relationships.create(values), approved => backend.relationships.get(approved.appliedTargetId)); },
     get(relationshipId) { return backend.relationships.get(relationshipId); },
-    update(relationshipId, values) { return commit(() => backend.relationships.update(relationshipId, values)); },
+    update(relationshipId, values) { return commit(() => backend.relationships.update(relationshipId, values), () => backend.relationships.get(relationshipId)); },
     delete(relationshipId) { return commit(() => backend.relationships.delete(relationshipId)); },
   });
 

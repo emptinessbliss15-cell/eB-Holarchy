@@ -157,7 +157,7 @@ export function createEBSupabase()
       if (!exists) await rawCreateRelationship({ source_holon_id: provenanceId, relationship_type_id: ofType.id, target_holon_id: targetId });
     }
     emitChange('eB:modelChanged', { provenanceId, status: 'approved', targetId });
-    return approved;
+    return { ...approved, appliedTargetId: targetId };
   }
 
   function prepareHolonBundle(bundle)
