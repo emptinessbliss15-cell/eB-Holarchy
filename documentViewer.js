@@ -164,7 +164,15 @@ export function initDocumentViewer() {
   document.querySelectorAll('#workspaceView [data-view]').forEach(button => button.addEventListener('click', () => setView(button.dataset.view)));
   viewer.addEventListener('click', event => { const item = event.target.closest('[data-holon-id]'); if (item) selectHolon(item.dataset.holonId); });
   viewer.addEventListener('keydown', event => { if ((event.key === 'Enter' || event.key === ' ') && event.target.matches('[data-holon-id]')) { event.preventDefault(); selectHolon(event.target.dataset.holonId); } });
-  window.addEventListener('holon:selected', event => { if (event.detail?.id && DOCUMENT_TYPES.has(String(event.detail.holon_type || '').toLowerCase())) selectHolon(event.detail.id, { fromGraph: true }); });
+  window.addEventListener('holon:selected', event => {
+    if (!event.detail?.id) return;
+    const isDocumentHolon = DOCUMENT_TYPES.has(String(event.detail.holon_type || '').toLowerCase());
+    if (isDocumentHolon) selectHolon(event.detail.id, { fromGraph: true });
+    else if (document.querySelector('.workspace-primary')?.dataset.view !== 'graph') setView('graph');
+  });
+  window.addEventListener('relationship:selected', () => {
+    if (document.querySelector('.workspace-primary')?.dataset.view !== 'graph') setView('graph');
+  });
   window.addEventListener('eB:graphRootChanged', () => render());
   window.addEventListener('eB:modelLoaded', event => { if (event.detail?.model) void refreshModel(event.detail.model); });
   window.addEventListener('eB:modelChanged', () => void refreshModel());
