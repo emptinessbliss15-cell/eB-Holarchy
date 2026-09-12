@@ -7,12 +7,17 @@ export function createEBlissSDK(backend)
   // Authority policy belongs above the backend. Provenance is always recorded,
   // but during the founder phase ordinary edits do not require a separate
   // approval step. Later RBAC/holarchy authority can decide this per action.
-  const requiresApproval = () => false;
+  const requiresApproval = async () =>
+  {
+    const session = await backend.auth.getSession();
+    return session?.data?.session?.user?.app_metadata?.eb_authority !== 'founder';
+  };
 
   const commit = async (operation, resolveApplied = null) =>
   {
     const provenance = await operation();
-    if (!provenance?.id || requiresApproval()) return provenance;
+    if (!provenance?.id) return provenance;
+    if (await requiresApproval()) return { ...provenance, pendingApproval: true };
     const approved = await backend.changes.approve(provenance.id);
     return resolveApplied ? resolveApplied(approved) : approved;
   };
