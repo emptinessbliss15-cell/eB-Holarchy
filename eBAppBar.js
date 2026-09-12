@@ -4,6 +4,7 @@ import { getLoadedModel } from './holons.js';
 
 const APP_NAME = 'eB Holarchy';
 const DEFAULT_VIEW = 'holarchy';
+let discussionAttentionChannel = null;
 
 const FALLBACK_VIEWS = [
   { id: 'holarchy', label: 'Holarchy', icon: '◎', position: 10 },
@@ -87,9 +88,53 @@ function ensureStyles()
     .eb-app-bar button { display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border:1px solid transparent; border-radius:6px; background:transparent; color:var(--eb-text); cursor:pointer; white-space:nowrap; }
     .eb-app-bar button:hover { background:var(--eb-input-bg); border-color:var(--eb-border); }
     .eb-app-bar button[aria-current="page"] { background:var(--eb-input-bg); border-color:var(--eb-border-strong); font-weight:700; }
+    .eb-app-bar button.eb-needs-attention { background:#b7791f; border-color:#d69e2e; color:#fff8dc; font-weight:700; }
+    .eb-app-bar button.eb-needs-attention:hover { background:#975a16; border-color:#ecc94b; }
     .eb-app-view-placeholder { margin:12px; }
   `;
   document.head.appendChild(style);
+}
+
+function discussionButton(root)
+{
+  return root?.querySelector('button[data-eb-app-view="discuss"]') || null;
+}
+
+function setDiscussionAttention(root, needsAttention)
+{
+  const button = discussionButton(root);
+  if (!button) return;
+  button.classList.toggle('eb-needs-attention', Boolean(needsAttention));
+  button.setAttribute('aria-label', needsAttention ? 'Discuss — new message' : 'Discuss');
+  button.title = needsAttention ? 'Discuss — new message needs attention' : 'Discuss';
+}
+
+function discussIsOpen(root)
+{
+  return discussionButton(root)?.getAttribute('aria-current') === 'page';
+}
+
+async function handleDiscussionActivity(root, payload)
+{
+  if (payload?.eventType && payload.eventType !== 'INSERT') return;
+  if (discussIsOpen(root)) return;
+
+  try
+  {
+    const session = await eBliss.auth.getSession();
+    const currentUserId = session?.data?.session?.user?.id;
+    const authorId = payload?.new?.author_id;
+    if (currentUserId && authorId && String(currentUserId) === String(authorId)) return;
+  }
+  catch { }
+
+  setDiscussionAttention(root, true);
+}
+
+function subscribeToDiscussionAttention(root)
+{
+  if (discussionAttentionChannel) void eBliss.discussions.unsubscribe(discussionAttentionChannel);
+  discussionAttentionChannel = eBliss.discussions.subscribe(payload => void handleDiscussionActivity(root, payload));
 }
 
 function ensureViewElement(view)
@@ -137,6 +182,8 @@ function showView(viewId, views, root)
     if (button.dataset.ebAppView === viewId) button.setAttribute('aria-current', 'page');
     else button.removeAttribute('aria-current');
   });
+
+  if (viewId === 'discuss') setDiscussionAttention(root, false);
 
   try { localStorage.setItem('eB-Holarchy.appView', viewId); } catch { }
   window.dispatchEvent(new CustomEvent('eB:appViewChanged', { detail: { viewId } }));
@@ -196,10 +243,13 @@ export async function initAppBar()
   }
 
   showView(storedView(views), views, root);
+  subscribeToDiscussionAttention(root);
+  eBliss.auth.onAuthStateChange(() => setTimeout(() => subscribeToDiscussionAttention(root), 0));
 
   const api = Object.freeze({
     views: () => views.map(view => ({ ...view })),
     show: viewId => showView(viewId, views, root),
+    setDiscussionAttention: needsAttention => setDiscussionAttention(root, needsAttention),
   });
   window.ebAppBar = api;
   return api;
