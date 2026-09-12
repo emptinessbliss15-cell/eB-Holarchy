@@ -113,6 +113,25 @@ function setThreadContext(root, contextType, contextId) {
   void loadThread(root);
 }
 
+function refreshVisibleThreads() {
+  document.querySelectorAll('[data-discussion-context-type][data-discussion-context-id]').forEach(root => void loadThread(root));
+}
+
+function setLiveStatus(status) {
+  document.querySelectorAll('.eb-discuss-notice').forEach(notice => {
+    notice.textContent = status === 'SUBSCRIBED' ? LIVE_NOTICE : `Shared discussion · ${String(status || 'connecting').toLowerCase()}`;
+  });
+}
+
+function subscribeToDiscussion() {
+  if (discussionChannel) void eBliss.discussions.unsubscribe(discussionChannel);
+  setLiveStatus('connecting');
+  discussionChannel = eBliss.discussions.subscribe(refreshVisibleThreads, status => {
+    setLiveStatus(status);
+    if (status === 'SUBSCRIBED') refreshVisibleThreads();
+  });
+}
+
 function thread({ compact = false, subject = 'general', contextType = 'channel', contextId = 'general' } = {}) {
   const root = document.createElement('div');
   root.className = compact ? 'eb-object-discussion' : 'eb-discuss-main';
@@ -255,8 +274,11 @@ export function initDiscussion() {
   if (!content || observer) return;
   observer = new MutationObserver(() => requestAnimationFrame(decorateInspector));
   observer.observe(content, { childList: true, subtree: true });
-  if (!discussionChannel) discussionChannel = eBliss.discussions.subscribe(() => {
-    document.querySelectorAll('[data-discussion-context-type][data-discussion-context-id]').forEach(root => void loadThread(root));
+  subscribeToDiscussion();
+  eBliss.auth.onAuthStateChange(() => setTimeout(subscribeToDiscussion, 0));
+  window.addEventListener('focus', refreshVisibleThreads);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') refreshVisibleThreads();
   });
   requestAnimationFrame(decorateInspector);
 }
