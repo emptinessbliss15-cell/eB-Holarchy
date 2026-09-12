@@ -49,6 +49,7 @@ export function createEBlissSDK(backend)
     relationships,
     imports,
     fieldDefinitions: backend.fieldDefinitions,
+    discussions: backend.discussions,
     changes: backend.changes,
     profile: backend.profile,
     toggles: backend.toggles,
