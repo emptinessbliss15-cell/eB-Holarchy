@@ -181,7 +181,8 @@ function injectIndicatorStyles()
     .eb-provenance-details { margin: 6px 0 10px; }
     .eb-provenance-details summary { cursor: pointer; opacity: .72; }
     .eb-provenance-changes { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-    .eb-provenance-actions { display: flex; gap: 6px; }
+    .eb-provenance-actions { display: flex; align-items: center; gap: 6px; }
+    .eb-provenance-waiting { margin-right: auto; font-size: .88em; opacity: .72; }
   `;
   document.head.appendChild(style);
 }
@@ -555,7 +556,9 @@ async function render()
 
   try
   {
-    const changes = await eBliss.changes.list('pending');
+    const [changes, sessionResult] = await Promise.all([eBliss.changes.list('pending'), eBliss.auth.getSession()]);
+    const currentUser = sessionResult?.data?.session?.user;
+    const canReview = currentUser?.app_metadata?.eb_authority === 'founder';
     pendingChanges = changes;
     setPendingCount(changes.length);
     reviewList.replaceChildren();
@@ -602,6 +605,10 @@ async function render()
 
       const actions = document.createElement('div');
       actions.className = 'eb-provenance-actions';
+      const isCreator = currentUser?.id && String(p.actor || '') === String(currentUser.id);
+      const waiting = document.createElement('span');
+      waiting.className = 'eb-provenance-waiting';
+      waiting.textContent = 'Waiting for approval';
       const approveButton = document.createElement('button');
       approveButton.type = 'button';
       approveButton.dataset.action = 'approve';
@@ -611,12 +618,14 @@ async function render()
       const rejectButton = document.createElement('button');
       rejectButton.type = 'button';
       rejectButton.dataset.action = 'reject';
-      rejectButton.dataset.defaultLabel = 'Reject';
-      rejectButton.dataset.busyLabel = '⟳ Rejecting…';
-      rejectButton.textContent = 'Reject';
-      actions.append(approveButton, rejectButton);
+      rejectButton.dataset.defaultLabel = canReview ? 'Reject' : 'Withdraw';
+      rejectButton.dataset.busyLabel = canReview ? '⟳ Rejecting…' : '⟳ Withdrawing…';
+      rejectButton.textContent = rejectButton.dataset.defaultLabel;
+      actions.append(waiting);
+      if (canReview) actions.append(approveButton, rejectButton);
+      else if (isCreator) actions.append(rejectButton);
 
-      approveButton.addEventListener('click', async () =>
+      if (canReview) approveButton.addEventListener('click', async () =>
       {
         setActionBusy(card, approveButton, true);
         try
@@ -633,13 +642,13 @@ async function render()
         }
       });
 
-      rejectButton.addEventListener('click', async () =>
+      if (canReview || isCreator) rejectButton.addEventListener('click', async () =>
       {
         setActionBusy(card, rejectButton, true);
         try
         {
           await eBliss.changes.reject(change.id);
-          setStatus('Change rejected', 'success');
+          setStatus(canReview ? 'Change rejected' : 'Proposal withdrawn', 'success');
           await render();
         }
         catch (error)
@@ -683,6 +692,12 @@ export function initProvenance()
     requestAnimationFrame(decorateInspector);
   });
   render();
+  eBliss.auth.onAuthStateChange(() => setTimeout(render, 0));
+  window.addEventListener('focus', render);
+  document.addEventListener('visibilitychange', () =>
+  {
+    if (document.visibilityState === 'visible') render();
+  });
   window.addEventListener('eB:provenanceCreated', render);
   window.addEventListener('eB:modelChanged', render);
 }

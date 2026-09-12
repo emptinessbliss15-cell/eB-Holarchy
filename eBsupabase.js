@@ -28,7 +28,25 @@ export function createEBSupabase()
   }
 
   async function currentUserId() { const sessionResult = await supabase.auth.getSession(); return sessionResult.data.session?.user?.id || null; }
-  async function requireReviewAuthority() { const sessionResult = await supabase.auth.getSession(); if (sessionResult.data.session?.user?.app_metadata?.eb_authority !== 'founder') throw new Error('Founder authority is required to review changes'); }
+  async function currentAuthUser()
+  {
+    const response = await supabase.auth.getUser();
+    if (response.error) throw new Error(`Authentication: ${response.error.message}`);
+    if (!response.data.user) throw new Error('A signed-in user is required');
+    return response.data.user;
+  }
+  async function requireReviewAuthority()
+  {
+    const user = await currentAuthUser();
+    if (user.app_metadata?.eb_authority !== 'founder') throw new Error('Founder authority is required to review changes');
+  }
+  async function requireRejectAuthority(provenanceId)
+  {
+    const user = await currentAuthUser();
+    if (user.app_metadata?.eb_authority === 'founder') return;
+    const change = await readProvenance(provenanceId);
+    if (String(change.provenance?.actor || '') !== String(user.id)) throw new Error('Only the proposal creator or a founder can reject this change');
+  }
   async function upsertProfile(userId, values)
   {
     const profile = result('Profile', await supabase.from('profiles').upsert({ id: userId, ...values }).select().single());
@@ -269,6 +287,6 @@ export function createEBSupabase()
     relationships: { async create(values) { return createProvenance('create', JSON.stringify({ entity: 'relationship', operation: 'create', values })); }, async get(relationshipId) { return result('Relationship', await supabase.from('relationships_view').select('*').eq('id', relationshipId).single()); }, async update(relationshipId, values) { return createProvenance('update', JSON.stringify({ entity: 'relationship', operation: 'update', targetId: relationshipId, values }), null); }, async delete(relationshipId) { return createProvenance('delete', JSON.stringify({ entity: 'relationship', operation: 'delete', targetId: relationshipId })); }, },
     imports: { stage: stageHolonBundle },
     fieldDefinitions: { create(typeName, values) { return createFieldDefinition(typeName, values); } },
-    changes: { async list(status = 'pending') { const typeId = await provenanceTypeId(); const rows = result('Changes', await supabase.from('holons_view').select('*').eq('holon_type_id', typeId).order('created_at', { ascending: false })); const fields = await provenanceFields(); return (rows || []).map(row => { let parsed = {}; try { parsed = JSON.parse(String(row.Content || '{}')); } catch { } const dynamic = parsed[DYNAMIC_FIELDS_KEY] || {}; const item = { ...row, provenance: Object.fromEntries(Object.entries(fields).map(([name, id]) => [name, dynamic[String(id)]])) }; return item; }).filter(item => !status || item.provenance.status === status); }, async get(id) { return readProvenance(id); }, async approve(id, reason = '') { await requireReviewAuthority(); return applyChange(id, 'approve', reason); }, async reject(id, reason = '') { await requireReviewAuthority(); return applyChange(id, 'reject', reason); } }
+    changes: { async list(status = 'pending') { const typeId = await provenanceTypeId(); const rows = result('Changes', await supabase.from('holons_view').select('*').eq('holon_type_id', typeId).order('created_at', { ascending: false })); const fields = await provenanceFields(); return (rows || []).map(row => { let parsed = {}; try { parsed = JSON.parse(String(row.Content || '{}')); } catch { } const dynamic = parsed[DYNAMIC_FIELDS_KEY] || {}; const item = { ...row, provenance: Object.fromEntries(Object.entries(fields).map(([name, id]) => [name, dynamic[String(id)]])) }; return item; }).filter(item => !status || item.provenance.status === status); }, async get(id) { return readProvenance(id); }, async approve(id, reason = '') { await requireReviewAuthority(); return applyChange(id, 'approve', reason); }, async reject(id, reason = '') { await requireRejectAuthority(id); return applyChange(id, 'reject', reason); } }
   };
 }
