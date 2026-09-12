@@ -1,13 +1,16 @@
 import { eBliss } from './eBSDK.js';
+import { mountDiscussionWorkspace } from './eBDiscussion.js';
+import { getLoadedModel } from './holons.js';
 
 const APP_NAME = 'eB Holarchy';
 const DEFAULT_VIEW = 'holarchy';
 
 const FALLBACK_VIEWS = [
   { id: 'holarchy', label: 'Holarchy', icon: '◎', position: 10 },
-  { id: 'settings', label: 'Settings', icon: '⚙', position: 20 },
-  { id: 'groups', label: 'Groups', icon: '◉', position: 30 },
-  { id: 'authority', label: 'Authority', icon: '⌘', position: 40 },
+  { id: 'discuss', label: 'Discuss', icon: '💬', position: 20 },
+  { id: 'settings', label: 'Settings', icon: '⚙', position: 30 },
+  { id: 'groups', label: 'Groups', icon: '◉', position: 40 },
+  { id: 'authority', label: 'Authority', icon: '⌘', position: 50 },
 ];
 
 function slug(value)
@@ -102,6 +105,12 @@ function ensureViewElement(view)
   section.hidden = true;
   section.dataset.ebAppView = view.id;
 
+  if (view.id === 'discuss') {
+    mountDiscussionWorkspace(section);
+    document.querySelector('.eb-main')?.appendChild(section);
+    return section;
+  }
+
   const heading = document.createElement('h3');
   heading.textContent = view.label;
   section.appendChild(heading);
@@ -149,7 +158,7 @@ export async function initAppBar()
   let views = [];
   try
   {
-    views = discoverViews(await eBliss.model.load());
+    views = discoverViews(getLoadedModel() || await eBliss.model.load());
   }
   catch (error)
   {
@@ -158,6 +167,8 @@ export async function initAppBar()
 
   if (!views.length) views = FALLBACK_VIEWS.map(view => ({ ...view }));
   if (!views.some(view => view.id === DEFAULT_VIEW)) views.unshift({ ...FALLBACK_VIEWS[0] });
+  if (!views.some(view => view.id === 'discuss')) views.push({ ...FALLBACK_VIEWS.find(view => view.id === 'discuss') });
+  views.sort((a, b) => a.position - b.position || a.label.localeCompare(b.label));
 
   root.className = 'eb-app-bar';
   root.replaceChildren();
