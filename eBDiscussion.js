@@ -1,6 +1,9 @@
-const PREVIEW_NOTICE = 'UI preview — messages in this build are not saved yet.';
+import { eBliss } from './eBSDK.js';
+
+const LIVE_NOTICE = 'Shared discussion · live updates';
 let selectedObject = null;
 let observer = null;
+let discussionChannel = null;
 
 function ensureStyles() {
   if (document.getElementById('eb-discussion-style')) return;
@@ -36,7 +39,7 @@ function ensureStyles() {
   document.head.appendChild(style);
 }
 
-function message(author, body, time = 'now') {
+function message(author, body, time = 'now', contextLabel = '') {
   const article = document.createElement('article');
   article.className = 'eb-message';
   const avatar = document.createElement('div');
@@ -54,19 +57,69 @@ function message(author, body, time = 'now') {
   text.className = 'eb-message-body';
   text.textContent = body;
   meta.append(name, stamp);
-  content.append(meta, text);
+  content.appendChild(meta);
+  if (contextLabel) {
+    const context = document.createElement('div');
+    context.className = 'eb-message-time';
+    context.textContent = contextLabel;
+    content.appendChild(context);
+  }
+  content.appendChild(text);
   article.append(avatar, content);
   return article;
 }
 
-function thread({ compact = false, subject = 'general' } = {}) {
+function messageTime(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleString();
+}
+
+async function loadThread(root) {
+  const list = root?.querySelector('.eb-message-list');
+  const contextType = root?.dataset.discussionContextType;
+  const contextId = root?.dataset.discussionContextId;
+  if (!list || !contextType || !contextId) return;
+  const contextKey = `${contextType}:${contextId}`;
+  list.replaceChildren();
+  const loading = document.createElement('div');
+  loading.className = 'muted';
+  loading.textContent = 'Loading discussion…';
+  list.appendChild(loading);
+  try {
+    const messages = await eBliss.discussions.list(contextType, contextId);
+    if (`${root.dataset.discussionContextType}:${root.dataset.discussionContextId}` !== contextKey) return;
+    list.replaceChildren();
+    if (!messages.length) {
+      const empty = document.createElement('div');
+      empty.className = 'muted';
+      empty.textContent = 'No messages yet.';
+      list.appendChild(empty);
+    } else messages.forEach(item => list.appendChild(message(item.author_name || item.author_id, item.body, messageTime(item.created_at), contextType === 'channel' && contextId === 'proposals' && item.context_type === 'provenance' ? `Proposal · ${String(item.context_id).slice(0, 8)}` : '')));
+    list.scrollTop = list.scrollHeight;
+  } catch (error) {
+    list.replaceChildren();
+    const failure = document.createElement('div');
+    failure.className = 'muted';
+    failure.textContent = error.message || 'Unable to load discussion.';
+    list.appendChild(failure);
+  }
+}
+
+function setThreadContext(root, contextType, contextId) {
+  if (!root) return;
+  root.dataset.discussionContextType = contextType;
+  root.dataset.discussionContextId = String(contextId);
+  void loadThread(root);
+}
+
+function thread({ compact = false, subject = 'general', contextType = 'channel', contextId = 'general' } = {}) {
   const root = document.createElement('div');
   root.className = compact ? 'eb-object-discussion' : 'eb-discuss-main';
+  root.dataset.discussionContextType = contextType;
+  root.dataset.discussionContextId = String(contextId);
   const list = document.createElement('div');
   list.className = 'eb-message-list';
-  list.appendChild(message('Nikki', compact
-    ? `Discussion about ${subject} will appear here.`
-    : 'This is the shared discussion workspace. Channels and Holon discussions will use the same messages.'));
   const form = document.createElement('form');
   form.className = 'eb-message-composer';
   const input = document.createElement('textarea');
@@ -76,16 +129,24 @@ function thread({ compact = false, subject = 'general' } = {}) {
   send.type = 'submit';
   send.textContent = 'Send';
   form.append(input, send);
-  form.addEventListener('submit', event => {
+  form.addEventListener('submit', async event => {
     event.preventDefault();
     const body = input.value.trim();
     if (!body) return;
-    list.appendChild(message('You', body));
-    input.value = '';
-    list.scrollTop = list.scrollHeight;
-    window.ebStatus?.info?.(PREVIEW_NOTICE);
+    send.disabled = true;
+    try {
+      await eBliss.discussions.create(root.dataset.discussionContextType, root.dataset.discussionContextId, body);
+      input.value = '';
+      await loadThread(root);
+    } catch (error) {
+      window.ebStatus?.error?.(error.message || 'Unable to send message');
+    } finally {
+      send.disabled = false;
+      input.focus();
+    }
   });
   root.append(list, form);
+  void loadThread(root);
   return root;
 }
 
@@ -100,6 +161,7 @@ function selectChannel(section, name) {
     input.placeholder = `Message #${name}…`;
     input.setAttribute('aria-label', input.placeholder);
   }
+  setThreadContext(section.querySelector('.eb-discuss-main'), 'channel', name);
   if (context) context.innerHTML = `<h3 class="eb-discuss-title">Context</h3><strong># ${name}</strong><p class="muted">${name === 'proposals' ? 'Conversation about changes awaiting a decision.' : `Conversation in the ${name} channel.`}</p>`;
 }
 
@@ -124,7 +186,7 @@ export function mountDiscussionWorkspace(section) {
   const main = thread();
   const header = document.createElement('header');
   header.className = 'eb-discuss-header';
-  header.innerHTML = `<strong># general</strong><span class="eb-discuss-notice">${PREVIEW_NOTICE}</span>`;
+  header.innerHTML = `<strong># general</strong><span class="eb-discuss-notice">${LIVE_NOTICE}</span>`;
   main.prepend(header);
   const context = document.createElement('aside');
   context.className = 'eb-discuss-context';
@@ -147,7 +209,8 @@ function decorateInspector() {
   const panel = document.createElement('div');
   panel.className = 'eb-discussion-inspector';
   panel.hidden = true;
-  panel.appendChild(thread({ compact: true, subject: selectedObject?.name || selectedObject?.relationship_type || 'this object' }));
+  const objectType = selectedObject?.source_holon_id ? 'relationship' : 'holon';
+  panel.appendChild(thread({ compact: true, subject: selectedObject?.name || selectedObject?.relationship_type || 'this object', contextType: objectType === 'holon' ? 'holon' : 'channel', contextId: objectType === 'holon' ? selectedObject.id : `relationship:${selectedObject?.id}` }));
   provenancePanel?.insertAdjacentElement('afterend', panel);
   button.addEventListener('click', () => {
     tabs.querySelectorAll('button').forEach(tab => tab.classList.toggle('is-active', tab === button));
@@ -184,6 +247,7 @@ export function initDiscussion() {
       note.textContent = `Provenance ${request.id || ''} · awaiting decision`;
       context.append(label, note);
     }
+    if (request.kind === 'proposal') setThreadContext(section?.querySelector('.eb-discuss-main'), 'provenance', request.id);
   });
   window.addEventListener('holon:selected', event => { selectedObject = event.detail || null; requestAnimationFrame(decorateInspector); });
   window.addEventListener('relationship:selected', event => { selectedObject = event.detail || null; requestAnimationFrame(decorateInspector); });
@@ -191,5 +255,8 @@ export function initDiscussion() {
   if (!content || observer) return;
   observer = new MutationObserver(() => requestAnimationFrame(decorateInspector));
   observer.observe(content, { childList: true, subtree: true });
+  if (!discussionChannel) discussionChannel = eBliss.discussions.subscribe(() => {
+    document.querySelectorAll('[data-discussion-context-type][data-discussion-context-id]').forEach(root => void loadThread(root));
+  });
   requestAnimationFrame(decorateInspector);
 }
