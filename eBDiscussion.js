@@ -145,6 +145,29 @@ function decorateInspector() {
 
 export function initDiscussion() {
   ensureStyles();
+  window.addEventListener('eB:discussionRequested', event => {
+    const request = event.detail || {};
+    window.ebAppBar?.show?.('discuss');
+    const section = document.getElementById('appView-discuss');
+    const heading = section?.querySelector('.eb-discuss-header strong');
+    const input = section?.querySelector('.eb-message-composer textarea');
+    const context = section?.querySelector('.eb-discuss-context');
+    if (heading) heading.textContent = request.kind === 'proposal' ? `Proposal · ${request.title || 'Pending change'}` : request.title || '# general';
+    if (input) {
+      input.placeholder = request.kind === 'proposal' ? 'Discuss this proposal…' : 'Write a message…';
+      input.setAttribute('aria-label', input.placeholder);
+      input.focus();
+    }
+    if (context && request.kind === 'proposal') {
+      context.innerHTML = '<h3 class="eb-discuss-title">Context</h3>';
+      const label = document.createElement('strong');
+      label.textContent = request.title || 'Pending proposal';
+      const note = document.createElement('p');
+      note.className = 'muted';
+      note.textContent = `Provenance ${request.id || ''} · awaiting decision`;
+      context.append(label, note);
+    }
+  });
   window.addEventListener('holon:selected', event => { selectedObject = event.detail || null; requestAnimationFrame(decorateInspector); });
   window.addEventListener('relationship:selected', event => { selectedObject = event.detail || null; requestAnimationFrame(decorateInspector); });
   const content = document.getElementById('holonInspectorContent');

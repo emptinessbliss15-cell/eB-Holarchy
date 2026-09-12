@@ -122,6 +122,7 @@ function injectIndicatorStyles()
     }
     .eb-provenance-current:hover:not(:disabled) { opacity: 1; background: var(--eb-hover); }
     .eb-provenance-current:disabled { cursor: default; opacity: .62; }
+    .eb-provenance-current.has-pending { color: #d18b20; background: color-mix(in srgb, #d18b20 14%, transparent); opacity: 1; }
     .eb-provenance-current-label { font-weight: 600; }
     .eb-provenance-count {
       display: inline-flex;
@@ -173,6 +174,8 @@ function injectIndicatorStyles()
     .eb-provenance-item {
       padding: 12px 0;
       border-bottom: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+      border-left: 3px solid #d18b20;
+      padding-left: 10px;
     }
     .eb-provenance-item:last-child { border-bottom: 0; }
     .eb-provenance-title { font-weight: 600; }
@@ -537,6 +540,7 @@ function setPendingCount(count)
   if (!button || !countText) return;
   countText.textContent = String(count);
   button.disabled = count === 0;
+  button.classList.toggle('has-pending', count > 0);
   button.title = count ? 'Review pending changes' : 'No pending changes';
   button.setAttribute('aria-label', `Provenance: ${count} pending change${count === 1 ? '' : 's'}`);
 }
@@ -608,7 +612,11 @@ async function render()
       const isCreator = currentUser?.id && String(p.actor || '') === String(currentUser.id);
       const waiting = document.createElement('span');
       waiting.className = 'eb-provenance-waiting';
-      waiting.textContent = 'Waiting for approval';
+      waiting.textContent = canReview ? 'Needs review' : 'Waiting for approval';
+      const discussButton = document.createElement('button');
+      discussButton.type = 'button';
+      discussButton.dataset.action = 'discuss';
+      discussButton.textContent = 'Discuss';
       const approveButton = document.createElement('button');
       approveButton.type = 'button';
       approveButton.dataset.action = 'approve';
@@ -621,9 +629,20 @@ async function render()
       rejectButton.dataset.defaultLabel = canReview ? 'Reject' : 'Withdraw';
       rejectButton.dataset.busyLabel = canReview ? '⟳ Rejecting…' : '⟳ Withdrawing…';
       rejectButton.textContent = rejectButton.dataset.defaultLabel;
-      actions.append(waiting);
+      actions.append(waiting, discussButton);
       if (canReview) actions.append(approveButton, rejectButton);
       else if (isCreator) actions.append(rejectButton);
+
+      discussButton.addEventListener('click', () =>
+      {
+        closeReview();
+        window.dispatchEvent(new CustomEvent('eB:discussionRequested', { detail: {
+          kind: 'proposal',
+          id: change.id,
+          title: humanizeChange(change) || change.name || 'Pending change',
+          change,
+        } }));
+      });
 
       if (canReview) approveButton.addEventListener('click', async () =>
       {
