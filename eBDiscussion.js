@@ -89,6 +89,20 @@ function thread({ compact = false, subject = 'general' } = {}) {
   return root;
 }
 
+function selectChannel(section, name) {
+  if (!section) return;
+  section.querySelectorAll('.eb-channel').forEach(button => button.classList.toggle('is-active', button.dataset.channel === name));
+  const heading = section.querySelector('.eb-discuss-header strong');
+  const input = section.querySelector('.eb-message-composer textarea');
+  const context = section.querySelector('.eb-discuss-context');
+  if (heading) heading.textContent = `# ${name}`;
+  if (input) {
+    input.placeholder = `Message #${name}…`;
+    input.setAttribute('aria-label', input.placeholder);
+  }
+  if (context) context.innerHTML = `<h3 class="eb-discuss-title">Context</h3><strong># ${name}</strong><p class="muted">${name === 'proposals' ? 'Conversation about changes awaiting a decision.' : `Conversation in the ${name} channel.`}</p>`;
+}
+
 export function mountDiscussionWorkspace(section) {
   ensureStyles();
   section.classList.remove('eb-app-view-placeholder');
@@ -102,7 +116,9 @@ export function mountDiscussionWorkspace(section) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = `eb-channel${index === 0 ? ' is-active' : ''}`;
+    button.dataset.channel = name;
     button.textContent = `# ${name}`;
+    button.addEventListener('click', () => selectChannel(section, name));
     sidebar.appendChild(button);
   });
   const main = thread();
@@ -149,6 +165,7 @@ export function initDiscussion() {
     const request = event.detail || {};
     window.ebAppBar?.show?.('discuss');
     const section = document.getElementById('appView-discuss');
+    if (request.kind === 'proposal') selectChannel(section, 'proposals');
     const heading = section?.querySelector('.eb-discuss-header strong');
     const input = section?.querySelector('.eb-message-composer textarea');
     const context = section?.querySelector('.eb-discuss-context');
