@@ -88,6 +88,9 @@ button { cursor: pointer; }
 .eb-operating-list { display: grid; gap: 7px; padding: 6px 0; }
 .eb-operating-list button { padding: 10px 12px; border: 1px solid var(--eb-border); border-radius: 6px; background: var(--eb-input-bg); color: var(--eb-text); text-align: left; }
 .eb-circle-heading { padding: 10px 12px 4px; }
+.eb-circle-heading-actions { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.eb-circle-up { max-width: 260px; padding: 5px 9px; overflow: hidden; border: 1px solid var(--eb-border-strong); border-radius: 5px; background: var(--eb-input-bg); color: var(--eb-text); text-overflow: ellipsis; white-space: nowrap; }
+.eb-circle-up:hover { background: var(--eb-hover); }
 .eb-circle-layout { display: grid; grid-template-columns: minmax(0,1fr) minmax(240px,320px); gap: 12px; min-height: 500px; padding: 8px 12px 14px; }
 .eb-circle-canvas { min-width: 0; min-height: 470px; overflow: auto; display: grid; place-items: center; padding: 20px; border: 1px solid var(--eb-border); border-radius: 8px; background: color-mix(in srgb, #79d8e4 14%, var(--eb-surface-alt)); }
 .eb-org-circle { box-sizing: border-box; width: clamp(230px, calc(265px + var(--circle-weight, 0) * 18px), 760px); min-height: clamp(230px, calc(230px + var(--circle-weight, 0) * 13px), 680px); padding: 42px 22px 26px; position: relative; display: flex; flex-direction: column; justify-content: center; border: 2px solid color-mix(in srgb, #0ea5b7 78%, var(--eb-border)); border-radius: 50%; background: color-mix(in srgb, #57c7d4 18%, var(--eb-surface)); }

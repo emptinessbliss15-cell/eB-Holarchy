@@ -38,8 +38,9 @@ export function renderCircleView({ container, context, holons = [], relationship
 
   const heading = document.createElement('div'); heading.className = 'panel-heading eb-circle-heading';
   const title = document.createElement('h3'); title.textContent = 'Circles';
+  const headingActions = document.createElement('div'); headingActions.className = 'eb-circle-heading-actions';
   const scope = document.createElement('span'); scope.className = 'muted'; scope.textContent = active ? `within ${active.name}` : 'choose an operating context';
-  heading.append(title, scope); container.appendChild(heading);
+  headingActions.appendChild(scope); heading.append(title, headingActions); container.appendChild(heading);
   if (!active) {
     const empty = document.createElement('div'); empty.className = 'eb-operating-empty';
     empty.textContent = 'Choose a Company or Circle above, or use “Operate within” on a Holon.';
@@ -63,6 +64,11 @@ export function renderCircleView({ container, context, holons = [], relationship
     const structural = candidates.filter(item => item.structural);
     const chosen = structural.length ? structural : candidates;
     childrenByParent.set(key, chosen.map(item => item.child).filter((child, index, all) => all.findIndex(item => String(item.id) === String(child.id)) === index));
+  }
+  const parentEntry = [...childrenByParent.entries()].find(([, children]) => children.some(child => String(child.id) === String(active.id)));
+  const parent = parentEntry ? byId.get(parentEntry[0]) : null;
+  if (parent && String(parent.id) !== String(active.id)) {
+    headingActions.prepend(makeButton(`↑ Up to ${parent.name || '(unnamed)'}`, 'eb-circle-up', () => onOperate?.(parent)));
   }
 
   const layout = document.createElement('div'); layout.className = 'eb-circle-layout';
