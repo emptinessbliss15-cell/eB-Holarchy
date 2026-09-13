@@ -1,8 +1,10 @@
+import { renderCircleView } from './eBCircleView.js';
+
 const STORAGE_KEY = 'eB-Holarchy.operatingContext';
 const VIEW_STORAGE_KEY = 'eB-Holarchy.operatingView';
 const OPERATING_TYPES = new Set(['company', 'circle']);
 
-let model = { holons: [], relationships: [] };
+let model = { holons: [], relationships: [], relationshipTypes: [] };
 let contextId = null;
 let currentView = 'graph';
 let initialized = false;
@@ -59,6 +61,14 @@ function renderContextView() {
   if (showGraph) return;
   panel.replaceChildren();
   const active = context();
+  if (currentView === 'circles') {
+    renderCircleView({
+      container: panel, context: active, ...model,
+      onOpen: holon => { setView('graph'); window.dispatchEvent(new CustomEvent('holon:open', { detail: { holon } })); },
+      onOperate: holon => setOperatingContext(holon),
+    });
+    return;
+  }
   const heading = document.createElement('div'); heading.className = 'panel-heading';
   const title = document.createElement('h3'); title.textContent = currentView[0].toUpperCase() + currentView.slice(1);
   const scope = document.createElement('span'); scope.className = 'muted'; scope.textContent = active ? `within ${active.name}` : 'choose an operating context';
@@ -81,7 +91,7 @@ function renderContextView() {
   panel.appendChild(list);
 }
 
-function setView(view) { if (!['graph', 'tensions', 'roles', 'processes'].includes(view)) return; currentView = view; write(VIEW_STORAGE_KEY, view); renderContextView(); }
+function setView(view) { if (!['graph', 'circles', 'tensions', 'roles', 'processes'].includes(view)) return; currentView = view; write(VIEW_STORAGE_KEY, view); renderContextView(); }
 
 export function setOperatingContext(value) {
   const next = value ? holonById(value.id ?? value) : null;
@@ -94,7 +104,7 @@ export function setOperatingContext(value) {
 export function getOperatingContext() { return context(); }
 
 export function updateOperatingModel(nextModel = {}) {
-  model = { holons: nextModel.holons || [], relationships: nextModel.relationships || [] };
+  model = { holons: nextModel.holons || [], relationships: nextModel.relationships || [], relationshipTypes: nextModel.relationshipTypes || [] };
   const saved = contextId || read(STORAGE_KEY);
   contextId = saved && holonById(saved) && isOperatingHolon(holonById(saved)) ? String(saved) : null;
   if (saved && !contextId) write(STORAGE_KEY, null);
@@ -103,6 +113,7 @@ export function updateOperatingModel(nextModel = {}) {
 
 export function initOperatingContext() {
   if (initialized) return; initialized = true; currentView = read(VIEW_STORAGE_KEY) || 'graph';
+  if (!['graph', 'circles', 'tensions', 'roles', 'processes'].includes(currentView)) currentView = 'graph';
   document.querySelectorAll('[data-operating-view]').forEach(button => button.addEventListener('click', () => setView(button.dataset.operatingView)));
   document.getElementById('newHolon')?.addEventListener('click', event => {
     const active = context();

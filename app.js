@@ -280,7 +280,7 @@ async function createRelationship() { if (holons.length < 2 || !relationshipType
 async function loadModelNow() { const model = await loadHolons(eBliss); holons = model.holons || []; relationships = model.relationships || []; relationshipTypes = model.relationshipTypes || []; holonTypes = model.holonTypes || []; const savedRoot = getStoredGraphRoot(); const rootId = savedRoot ? resolveGraphRoot(savedRoot) : null; if (savedRoot && !rootId) storeGraphRoot(null); refreshGraphRootCombo(); updateHolonGraph({ holons, relationships, relationshipTypes, rootId }); if (rootId) { const root = holons.find(item => String(item.id) === String(rootId)); elements.graphRoot.value = root?.name || ''; window.dispatchEvent(new CustomEvent('eB:graphRootChanged', { detail: { rootId } })); } if (selectedRelationship) { const refreshed = relationships.find(r => String(r.id) === String(selectedRelationship.id)); renderRelationshipInspector(refreshed || null); } else if (selectedHolon) { const refreshed = holons.find(h => String(h.id) === String(selectedHolon.id)); renderHolonInspector(refreshed || null); } }
 function loadModel() {
   if (modelLoadPromise) return modelLoadPromise;
-  modelLoadPromise = loadModelNow().then(result => { updateOperatingModel({ holons, relationships }); return result; }).finally(() => { modelLoadPromise = null; });
+  modelLoadPromise = loadModelNow().then(result => { updateOperatingModel({ holons, relationships, relationshipTypes }); return result; }).finally(() => { modelLoadPromise = null; });
   return modelLoadPromise;
 }
 function wireUI() {
