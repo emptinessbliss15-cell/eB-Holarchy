@@ -116,6 +116,13 @@ p.eb-document-content-block { margin: .6rem 0; line-height: 1.55; }
 .panel-heading .muted { font-size: 12px; }
 .panel-actions { flex: 0 0 auto; margin-left: auto; display: flex !important; flex-direction: row !important; align-items: center; gap: 8px; white-space: nowrap; }
 .panel-actions button { flex: 0 0 auto; }
+.eb-add-button { position: relative; }
+.eb-add-button-trigger { width: 30px; height: 30px; padding: 0; border: 1px solid var(--eb-border-strong); border-radius: 5px; background: var(--eb-input-bg); color: var(--eb-text); font-size: 21px; line-height: 1; }
+.eb-add-button-trigger:hover, .eb-add-button-trigger[aria-expanded="true"] { background: var(--eb-hover); }
+.eb-add-button-menu { position: absolute; z-index: 30; top: calc(100% + 4px); right: 0; min-width: 170px; padding: 4px; border: 1px solid var(--eb-border-strong); border-radius: 6px; background: var(--eb-surface); box-shadow: 0 8px 24px rgb(0 0 0 / .28); }
+.eb-add-button-menu[hidden] { display: none; }
+.eb-add-button-menu button { display: block; width: 100%; padding: 7px 10px; border: 0; border-radius: 4px; background: transparent; color: var(--eb-text); text-align: left; white-space: nowrap; }
+.eb-add-button-menu button:hover, .eb-add-button-menu button:focus-visible { background: var(--eb-hover); outline: none; }
 .workspace-grid .panel-heading { display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; align-items: center; justify-content: space-between; }
 .workspace-grid .panel-heading h3 { flex: 0 0 auto; margin: 0 !important; }
 .panel { min-width: 0; }

@@ -11,6 +11,7 @@ import { createEBComboBox, holonComboOptions } from './eBComboBox.js';
 import { createEBProps } from './eBProps.js';
 import { showModal } from './eBModal.js';
 import { initOperatingContext, getOperatingContext, updateOperatingModel } from './eBOperatingContext.js';
+import { createEBAddButton } from './eBAddButton.js';
 
 const status = eBStatus;
 const GRAPH_ROOT_STORAGE_KEY = 'eB-Holarchy.graphRoot';
@@ -20,7 +21,7 @@ const elements = {
   app: document.getElementById('app'), auth: document.getElementById('auth'), graph: document.getElementById('holonGraph'), graphRoot: document.getElementById('graphRoot'), graphDepth: document.getElementById('graphDepth'),
   inspector: document.getElementById('holonInspector'), inspectorContent: document.getElementById('holonInspectorContent'),
   refresh: document.getElementById('refresh'), refreshApp: document.getElementById('refreshApp'), debugApp: document.getElementById('debugApp'),
-  newHolon: document.getElementById('newHolon'), newRelationship: document.getElementById('newRelationship'), newHolonType: document.getElementById('newHolonType'), newRelationshipType: document.getElementById('newRelationshipType'),
+  addButton: document.getElementById('addButton'),
   testStatusSuccess: document.getElementById('testStatusSuccess'), testStatusWarn: document.getElementById('testStatusWarn'), testStatusError: document.getElementById('testStatusError'),
 };
 let holons = [], relationships = [], relationshipTypes = [], holonTypes = [];
@@ -283,7 +284,13 @@ function loadModel() {
   return modelLoadPromise;
 }
 function wireUI() {
-  elements.newHolon?.addEventListener('click', () => void createHolon()); elements.newRelationship?.addEventListener('click', () => void createRelationship()); elements.newHolonType?.addEventListener('click', () => void createHolonType()); elements.newRelationshipType?.addEventListener('click', () => void createRelationshipType()); elements.refresh?.addEventListener('click', () => void loadModel()); elements.refreshApp?.addEventListener('click', () => window.location.reload()); elements.debugApp?.addEventListener('click', () => console.log({ holons, relationships, relationshipTypes, holonTypes }));
+  createEBAddButton(elements.addButton, { items: [
+    { label: 'Holon', onSelect: () => void createHolon() },
+    { label: 'Relationship', onSelect: () => void createRelationship() },
+    { label: 'Holon Type', onSelect: () => void createHolonType() },
+    { label: 'Relationship Type', onSelect: () => void createRelationshipType() },
+  ] });
+  elements.refresh?.addEventListener('click', () => void loadModel()); elements.refreshApp?.addEventListener('click', () => window.location.reload()); elements.debugApp?.addEventListener('click', () => console.log({ holons, relationships, relationshipTypes, holonTypes }));
   window.addEventListener('holon:contextcreate', event => void createHolon('', '', event.detail?.parent || null)); window.addEventListener('holon:contextedit', event => { if (event.detail?.holon) void editHolon(event.detail.holon); }); window.addEventListener('holon:contextdelete', event => { if (event.detail?.holon) void deleteHolon(event.detail.holon); }); window.addEventListener('relationship:selected', event => { if (event.detail?.id) renderRelationshipInspector(event.detail); }); window.addEventListener('relationship:contextdelete', event => { if (event.detail?.relationship) void deleteRelationship(event.detail.relationship, event.detail); });
   window.addEventListener('eB:modelChanged', () => void loadModel());
   window.addEventListener('holon:open', event => { if (event.detail?.holon) openHolon(event.detail.holon); });
