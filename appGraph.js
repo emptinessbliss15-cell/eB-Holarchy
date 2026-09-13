@@ -19,6 +19,7 @@ const elements = {
 let holons = [], relationships = [], relationshipTypes = [], holonTypes = [];
 let graph = null, graphRootCombo = null;
 let graphRelationshipDropInstalled = false;
+let lastGraphTap = { id: null, at: 0 };
 
 function setStatus(text, level = 'info') { if (!text) return status.clear(); status[level](text); }
 
@@ -30,6 +31,11 @@ function openHolon(holon) {
 
 function refreshGraphRootCombo() {
   if (!elements.graphRoot) return;
+  const previousRootName = String(elements.graphRoot.value || '').trim();
+  const previousRoot = previousRootName
+    ? holons.find(holon => String(holon.name || '').trim() === previousRootName)
+    : null;
+
   graphRootCombo?.destroy?.();
   graphRootCombo = createEBComboBox(elements.graphRoot, {
     source: holonComboOptions(holons), minChars: 0, clearable: true,
@@ -40,6 +46,14 @@ function refreshGraphRootCombo() {
       if (rootId) setGraphRoot(rootId);
     },
   });
+
+  // Rebuilding the combo after a model mutation must not change the user's
+  // current graph root. Context-menu/double-click navigation writes the root
+  // name into this control, so restore that root after the combo is rebuilt.
+  if (previousRoot) {
+    elements.graphRoot.value = previousRoot.name || '';
+    setGraphRoot(previousRoot.id);
+  }
 }
 
 function holonTypeOptions(selected = '') {
@@ -229,6 +243,20 @@ async function applySession(session) {
   destroyHolonGraph(); graph = null; graphRootCombo?.destroy?.(); graphRootCombo = null; graphRelationshipDropInstalled = false;
   setStatus('Sign in to open the Holon Workspace');
 }
+
+window.addEventListener('holon:selected', event => {
+  const holon = event.detail;
+  if (!holon?.id) return;
+  const now = performance.now();
+  const id = String(holon.id);
+  if (lastGraphTap.id === id && now - lastGraphTap.at <= 450) {
+    if (elements.graphRoot) elements.graphRoot.value = holon.name || '';
+    setGraphRoot(id);
+    lastGraphTap = { id: null, at: 0 };
+    return;
+  }
+  lastGraphTap = { id, at: now };
+});
 
 elements.refresh?.addEventListener('click', loadModel);
 elements.newHolon?.addEventListener('click', () => createHolon());
