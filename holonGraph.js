@@ -375,6 +375,7 @@ function installContextMenu() {
     if (kind === 'node' && holon) {
       add('Inspect Holon', () => emitSelection(holon));
       add('Set as Graph Root', () => { currentRootId = String(holon.id); const control = document.getElementById('graphRoot'); if (control) control.value = holon.name || ''; render(); target.select(); emitSelection(holon); });
+      if (['company', 'circle'].includes(String(holon.holon_type || '').trim().toLowerCase())) add('Operate within', () => window.dispatchEvent(new CustomEvent('holon:operatewithin', { detail: { holon } })));
       add('Create Holon Here', () => window.dispatchEvent(new CustomEvent('holon:contextcreate', { detail: { parent: holon } })));
       add('New Relationship', () => document.getElementById('newRelationship')?.click());
       separator();

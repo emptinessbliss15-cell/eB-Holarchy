@@ -10,6 +10,7 @@ import { createHolonGraph, updateHolonGraph, destroyHolonGraph, setGraphRoot, se
 import { createEBComboBox, holonComboOptions } from './eBComboBox.js';
 import { createEBProps } from './eBProps.js';
 import { showModal } from './eBModal.js';
+import { initOperatingContext, getOperatingContext, updateOperatingModel } from './eBOperatingContext.js';
 
 const status = eBStatus;
 const GRAPH_ROOT_STORAGE_KEY = 'eB-Holarchy.graphRoot';
@@ -165,7 +166,10 @@ function renderHolonInspector(holon)
     title: holon.name || '(unnamed Holon)',
     rows,
     ariaLabel: `${holon.name || 'Holon'} properties`,
-    actions: [{ label: 'Edit Holon', onClick: () => editHolon(holon) }],
+    actions: [
+      ...(isOperatingHolon(holon) ? [{ label: 'Operate within', onClick: () => window.dispatchEvent(new CustomEvent('holon:operatewithin', { detail: { holon } })) }] : []),
+      { label: 'Edit Holon', onClick: () => editHolon(holon) },
+    ],
     editor: row =>
     {
       if (row.key === 'holon_type') return { type: 'combobox', options: holonTypeOptions(holon.holon_type), value: holon.holon_type, minChars: 0, allowCustom: false };
@@ -261,6 +265,7 @@ function applyGraphRoot(value) { const rootId = resolveGraphRoot(value); if (!ro
 function refreshGraphRootCombo() { if (!elements.graphRoot) return; const currentText = elements.graphRoot.value; graphRootCombo?.destroy?.(); graphRootCombo = createEBComboBox(elements.graphRoot, { source: holonComboOptions(holons), minChars: 0, clearable: true, placeholder: 'Choose a root Holon…', onChange: (_input, value) => applyGraphRoot(Array.isArray(value) ? value[0] : value), onSelect: (_input, item) => applyGraphRoot(item?.value ?? item) }); const restored = resolveGraphRoot(currentText); if (restored) { const selected = holons.find(holon => String(holon.id) === String(restored)); elements.graphRoot.value = selected?.name || ''; } }
 function restoreStoredGraphRoot() { const saved = getStoredGraphRoot(); if (!saved) return; const rootId = resolveGraphRoot(saved); if (!rootId) { storeGraphRoot(null); return; } const root = holons.find(holon => String(holon.id) === String(rootId)); if (!root) { storeGraphRoot(null); return; } elements.graphRoot.value = root.name || ''; setGraphRoot(root.id); window.dispatchEvent(new CustomEvent('eB:graphRootChanged', { detail: { rootId: root.id } })); }
 function holonTypeOptions(selected = '') { const options = holonTypes.map(type => ({ value: type.name, label: type.name })); if (selected && !options.some(option => option.value === selected)) options.unshift({ value: selected, label: selected }); return options; }
+function isOperatingHolon(holon) { return ['company', 'circle'].includes(String(holon?.holon_type || '').trim().toLowerCase()); }
 function defaultHolonType() { return holonTypes.find(type => type.name === 'Holon')?.name || holonTypes.find(type => type.name === 'Tree Branch')?.name || holonTypes[0]?.name || ''; }
 function holonOptions(includeNone = false, selected = '') { const options = holons.filter(h => String(h.holon_type || '').toLowerCase() !== 'provenance').map(h => ({ value: h.id, label: h.name || '(unnamed)' })); if (includeNone) options.unshift({ value: '', label: '— None —' }); if (selected && !options.some(option => option.value === selected)) options.unshift({ value: selected, label: '(current)' }); return options; }
 function relationshipTypeOptions(includeNone = false, selected = '') { const options = relationshipTypes.map(t => ({ value: t.id, label: t.name || '(unnamed)' })); if (includeNone) options.unshift({ value: '', label: '— None —' }); if (selected && !options.some(option => option.value === selected)) options.unshift({ value: selected, label: '(current)' }); return options; }
@@ -274,15 +279,17 @@ async function createRelationship() { if (holons.length < 2 || !relationshipType
 async function loadModelNow() { const model = await loadHolons(eBliss); holons = model.holons || []; relationships = model.relationships || []; relationshipTypes = model.relationshipTypes || []; holonTypes = model.holonTypes || []; const savedRoot = getStoredGraphRoot(); const rootId = savedRoot ? resolveGraphRoot(savedRoot) : null; if (savedRoot && !rootId) storeGraphRoot(null); refreshGraphRootCombo(); updateHolonGraph({ holons, relationships, relationshipTypes, rootId }); if (rootId) { const root = holons.find(item => String(item.id) === String(rootId)); elements.graphRoot.value = root?.name || ''; window.dispatchEvent(new CustomEvent('eB:graphRootChanged', { detail: { rootId } })); } if (selectedRelationship) { const refreshed = relationships.find(r => String(r.id) === String(selectedRelationship.id)); renderRelationshipInspector(refreshed || null); } else if (selectedHolon) { const refreshed = holons.find(h => String(h.id) === String(selectedHolon.id)); renderHolonInspector(refreshed || null); } }
 function loadModel() {
   if (modelLoadPromise) return modelLoadPromise;
-  modelLoadPromise = loadModelNow().finally(() => { modelLoadPromise = null; });
+  modelLoadPromise = loadModelNow().then(result => { updateOperatingModel({ holons, relationships }); return result; }).finally(() => { modelLoadPromise = null; });
   return modelLoadPromise;
 }
 function wireUI() {
   elements.newHolon?.addEventListener('click', () => void createHolon()); elements.newRelationship?.addEventListener('click', () => void createRelationship()); elements.newHolonType?.addEventListener('click', () => void createHolonType()); elements.newRelationshipType?.addEventListener('click', () => void createRelationshipType()); elements.refresh?.addEventListener('click', () => void loadModel()); elements.refreshApp?.addEventListener('click', () => window.location.reload()); elements.debugApp?.addEventListener('click', () => console.log({ holons, relationships, relationshipTypes, holonTypes }));
   window.addEventListener('holon:contextcreate', event => void createHolon('', '', event.detail?.parent || null)); window.addEventListener('holon:contextedit', event => { if (event.detail?.holon) void editHolon(event.detail.holon); }); window.addEventListener('holon:contextdelete', event => { if (event.detail?.holon) void deleteHolon(event.detail.holon); }); window.addEventListener('relationship:selected', event => { if (event.detail?.id) renderRelationshipInspector(event.detail); }); window.addEventListener('relationship:contextdelete', event => { if (event.detail?.relationship) void deleteRelationship(event.detail.relationship, event.detail); });
   window.addEventListener('eB:modelChanged', () => void loadModel());
+  window.addEventListener('holon:open', event => { if (event.detail?.holon) openHolon(event.detail.holon); });
 }
 async function start() { wireUI(); try { await initAuth({ api: eBliss, container: elements.auth, onSession: async session => { elements.app.hidden = !session; if (session) { if (!graph) graph = createHolonGraph({ element: elements.graph, holons, relationships, relationshipTypes, onSelect: openHolon }); await loadModel(); } }, setStatus }); } catch (error) { setStatus(error.message || 'Unable to start application', 'error'); } }
 
 injectInspectorStyles();
+initOperatingContext();
 start();
