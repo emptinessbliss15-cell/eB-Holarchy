@@ -11,6 +11,7 @@ export function createEBSupabase()
   if (!window.supabase) throw new Error('Supabase client library is not loaded');
   const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
   const result = (label, response) => { if (response.error) throw new Error(`${label}: ${response.error.message}`); return response.data; };
+  let impersonatedActor = null;
 
   async function resolveHolonValues(values)
   {
@@ -28,6 +29,7 @@ export function createEBSupabase()
   }
 
   async function currentUserId() { const sessionResult = await supabase.auth.getSession(); return sessionResult.data.session?.user?.id || null; }
+  async function currentActorId() { return impersonatedActor?.id || await currentUserId(); }
   async function currentAuthUser()
   {
     const response = await supabase.auth.getUser();
@@ -81,7 +83,7 @@ export function createEBSupabase()
   {
     const fields = await provenanceFields();
     const now = new Date().toISOString();
-    const actor = await currentUserId();
+    const actor = await currentActorId();
     const values = {};
     const set = (name, value) => { if (fields[name]) values[String(fields[name])] = value; };
     set('timestamp', now); set('action', action); set('status', 'pending'); set('actor', actor || 'anonymous'); set('source', source); set('changes', changes);
@@ -113,7 +115,7 @@ export function createEBSupabase()
     let parsed = {}; try { parsed = JSON.parse(String(current.Content || '{}')); } catch { }
     const dynamic = { ...(parsed[DYNAMIC_FIELDS_KEY] || {}) };
     if (fields.status) dynamic[String(fields.status)] = status;
-    const actor = await currentUserId();
+    const actor = await currentActorId();
     if (fields.actor && actor) dynamic[String(fields.actor)] = actor;
     if (fields.reason && extra.reason) dynamic[String(fields.reason)] = extra.reason;
     return rawUpdateHolon(provenanceId, { name: `${current.provenance.action || 'change'} — ${status}`, Content: JSON.stringify({ ...parsed, [DYNAMIC_FIELDS_KEY]: dynamic }) });
@@ -347,7 +349,25 @@ export function createEBSupabase()
 
   return {
     auth: { getSession() { return supabase.auth.getSession(); }, onAuthStateChange(callback) { return supabase.auth.onAuthStateChange(callback); }, signIn(email, password) { return supabase.auth.signInWithPassword({ email, password }); }, signUp(email, password) { return supabase.auth.signUp({ email, password }); }, signOut() { return supabase.auth.signOut({ scope: 'local' }); } },
-    profile: { async get(userId) { return result('Profile', await supabase.from('profiles').select('*').eq('id', userId).maybeSingle()); }, upsert: upsertProfile },
+    profile: {
+      async get(userId) { return result('Profile', await supabase.from('profiles').select('*').eq('id', userId).maybeSingle()); },
+      async list() { return result('Participant directory', await supabase.from('participant_directory').select('id,display_name,person_holon_id').order('display_name')) || []; },
+      upsert: upsertProfile,
+    },
+    identity: {
+      async authenticated() { const user = await currentAuthUser(); return { id: user.id, email: user.email || '' }; },
+      async actor() { const authenticatedId = await currentUserId(); return impersonatedActor || (authenticatedId ? { id: authenticatedId, display_name: null, impersonating: false } : null); },
+      async impersonate(actorId) {
+        const user = await currentAuthUser();
+        if (user.app_metadata?.eb_authority !== 'founder') throw new Error('Founder authority is required to impersonate a mock participant');
+        if (!actorId || String(actorId) === String(user.id)) { impersonatedActor = null; emitChange('eB:actorChanged', { actor: null, authenticatedId: user.id }); return null; }
+        const actor = result('Participant', await supabase.from('participant_directory').select('id,display_name,person_holon_id').eq('id', actorId).single());
+        impersonatedActor = { ...actor, impersonating: true };
+        emitChange('eB:actorChanged', { actor: impersonatedActor, authenticatedId: user.id });
+        return impersonatedActor;
+      },
+      clear() { impersonatedActor = null; emitChange('eB:actorChanged', { actor: null }); },
+    },
     toggles: { async list() { const userId = await currentUserId(); if (!userId) return []; return result('Feature toggles', await supabase.from('user_feature_toggles').select('feature_name, enabled, updated_at').eq('user_id', userId).order('feature_name')) || []; }, async set(name, enabled) { const userId = await currentUserId(); if (!userId) throw new Error('A signed-in user is required to change feature toggles'); return result('Feature toggle', await supabase.from('user_feature_toggles').upsert({ user_id: userId, feature_name: String(name), enabled: enabled === true }, { onConflict: 'user_id,feature_name' }).select().single()); }, async reset(name) { const userId = await currentUserId(); if (!userId) throw new Error('A signed-in user is required to reset a feature toggle'); return result('Feature toggle', await supabase.from('user_feature_toggles').delete().eq('user_id', userId).select('feature_name').maybeSingle()); } },
     model: { async load() { const [holons, relationships, relationshipTypes, holonTypes] = await Promise.all([supabase.from('holons_view').select('*').order('created_at'), supabase.from('relationships_view').select('*').order('position').order('created_at'), supabase.from('relationship_types').select('*').order('name'), supabase.from('holon_types').select('*').order('name')]); return { holons: result('Holons', holons) || [], relationships: result('Relationships', relationships) || [], relationshipTypes: result('Relationship types', relationshipTypes) || [], holonTypes: result('Holon types', holonTypes) || [] }; } },
     holons: { async create(values) { return createProvenance('create', JSON.stringify({ entity: 'holon', operation: 'create', values })); }, async get(holonId) { return result('Holon', await supabase.from('holons_view').select('*').eq('id', holonId).single()); }, async update(holonId, values) { return createProvenance('update', JSON.stringify({ entity: 'holon', operation: 'update', targetId: holonId, values }), holonId); }, async delete(holonId) { return createProvenance('delete', JSON.stringify({ entity: 'holon', operation: 'delete', targetId: holonId }), holonId); } },
@@ -358,7 +378,7 @@ export function createEBSupabase()
     fieldDefinitions: { create(typeName, values) { return createFieldDefinition(typeName, values); } },
     discussions: {
       async list(contextType, contextId) { let query = supabase.from('discussion_messages_view').select('*'); query = contextType === 'channel' && String(contextId) === 'proposals' ? query.or('context_type.eq.provenance,and(context_type.eq.channel,context_id.eq.proposals)') : query.eq('context_type', contextType).eq('context_id', String(contextId)); return result('Discussion messages', await query.order('created_at')) || []; },
-      async create(contextType, contextId, body) { const authorId = await currentUserId(); if (!authorId) throw new Error('Sign in to send a message'); return result('Discussion message', await supabase.from('discussion_messages').insert({ context_type: contextType, context_id: String(contextId), author_id: authorId, body: String(body).trim() }).select().single()); },
+      async create(contextType, contextId, body) { const authorId = await currentActorId(); if (!authorId) throw new Error('Sign in to send a message'); return result('Discussion message', await supabase.from('discussion_messages').insert({ context_type: contextType, context_id: String(contextId), author_id: authorId, body: String(body).trim() }).select().single()); },
       subscribe(callback, statusCallback) { return supabase.channel(`discussion-messages-${crypto.randomUUID()}`).on('postgres_changes', { event: '*', schema: 'public', table: 'discussion_messages' }, callback).subscribe(statusCallback); },
       unsubscribe(channel) { return supabase.removeChannel(channel); },
     },

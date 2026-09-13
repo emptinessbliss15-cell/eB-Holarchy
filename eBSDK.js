@@ -52,6 +52,7 @@ export function createEBlissSDK(backend)
     discussions: backend.discussions,
     changes: backend.changes,
     profile: backend.profile,
+    identity: backend.identity,
     toggles: backend.toggles,
   });
 }

@@ -121,8 +121,8 @@ async function handleDiscussionActivity(root, payload)
 
   try
   {
-    const session = await eBliss.auth.getSession();
-    const currentUserId = session?.data?.session?.user?.id;
+    const actor = await eBliss.identity.actor();
+    const currentUserId = actor?.id;
     const authorId = payload?.new?.author_id;
     if (currentUserId && authorId && String(currentUserId) === String(authorId)) return;
   }
@@ -245,6 +245,7 @@ export async function initAppBar()
   showView(storedView(views), views, root);
   subscribeToDiscussionAttention(root);
   eBliss.auth.onAuthStateChange(() => setTimeout(() => subscribeToDiscussionAttention(root), 0));
+  window.addEventListener('eB:actorChanged', () => setDiscussionAttention(root, false));
 
   const api = Object.freeze({
     views: () => views.map(view => ({ ...view })),

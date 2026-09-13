@@ -276,6 +276,7 @@ export function initDiscussion() {
   observer.observe(content, { childList: true, subtree: true });
   subscribeToDiscussion();
   eBliss.auth.onAuthStateChange(() => setTimeout(subscribeToDiscussion, 0));
+  window.addEventListener('eB:actorChanged', refreshVisibleThreads);
   window.addEventListener('focus', refreshVisibleThreads);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') refreshVisibleThreads();
