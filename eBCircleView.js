@@ -1,3 +1,5 @@
+import { createEBAddButton } from './eBAddButton.js';
+
 const STRUCTURAL_NAMES = new Set([
   'circle of', 'subcircle of', 'role of', 'member of', 'part of', 'belongs to',
   'contained by', 'within', 'accountability of',
@@ -30,8 +32,9 @@ function makeButton(label, className, onClick) {
   return button;
 }
 
-export function renderCircleView({ container, context, holons = [], relationships = [], relationshipTypes = [], onOpen, onOperate } = {}) {
+export function renderCircleView({ container, context, holons = [], relationships = [], relationshipTypes = [], onOpen, onOperate, onCreate, onCreateRelationship, onEdit } = {}) {
   if (!container) return;
+  container._ebCircleAddButton?.destroy?.();
   container.replaceChildren();
   const byId = new Map(holons.map(holon => [String(holon.id), holon]));
   const active = context && byId.get(String(context.id));
@@ -70,6 +73,16 @@ export function renderCircleView({ container, context, holons = [], relationship
   if (parent && String(parent.id) !== String(active.id)) {
     headingActions.prepend(makeButton(`↑ Up to ${parent.name || '(unnamed)'}`, 'eb-circle-up', () => onOperate?.(parent)));
   }
+  const addHost = document.createElement('div');
+  headingActions.appendChild(addHost);
+  container._ebCircleAddButton = createEBAddButton(addHost, { label: `Add within ${active.name || 'circle'}…`, items: [
+    { label: 'Circle', onSelect: () => onCreate?.('Circle', active) },
+    { label: 'Role', onSelect: () => onCreate?.('Role', active) },
+    { label: 'Tension', onSelect: () => onCreate?.('Tension', active) },
+    { label: 'Process', onSelect: () => onCreate?.('Process', active) },
+    { label: 'Holon', onSelect: () => onCreate?.('', active) },
+    { label: 'Relationship', onSelect: () => onCreateRelationship?.(active) },
+  ] });
 
   const layout = document.createElement('div'); layout.className = 'eb-circle-layout';
   const canvas = document.createElement('div'); canvas.className = 'eb-circle-canvas';
@@ -96,6 +109,7 @@ export function renderCircleView({ container, context, holons = [], relationship
     if (connected.length > 18) { const item = document.createElement('li'); item.textContent = `+ ${connected.length - 18} more`; relationList.appendChild(item); }
     detail.appendChild(relationList);
     const actions = document.createElement('div'); actions.className = 'eb-circle-detail-actions';
+    actions.appendChild(makeButton('Edit', '', () => onEdit?.(holon)));
     actions.appendChild(makeButton('Open in Graph', '', () => onOpen?.(holon)));
     if (isCircle(holon) && String(holon.id) !== String(active.id)) actions.appendChild(makeButton('Operate within', '', () => onOperate?.(holon)));
     detail.appendChild(actions);

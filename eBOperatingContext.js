@@ -66,6 +66,9 @@ function renderContextView() {
       container: panel, context: active, ...model,
       onOpen: holon => { setView('graph'); window.dispatchEvent(new CustomEvent('holon:open', { detail: { holon } })); },
       onOperate: holon => setOperatingContext(holon),
+      onCreate: (type, parent) => window.dispatchEvent(new CustomEvent('holon:contextcreate', { detail: { type, parent } })),
+      onCreateRelationship: parent => window.dispatchEvent(new CustomEvent('relationship:contextcreate', { detail: { parent } })),
+      onEdit: holon => window.dispatchEvent(new CustomEvent('holon:contextedit', { detail: { holon } })),
     });
     return;
   }
