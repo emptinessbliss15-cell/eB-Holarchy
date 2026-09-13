@@ -22,8 +22,10 @@ export function createEBSupabase()
     {
       const typeName = String(normalized.holon_type).trim();
       delete normalized.holon_type;
-      const type = result('Holon type', await supabase.from('holon_types').select('id').eq('name', typeName).single());
-      normalized.holon_type_id = type.id;
+      const matches = result('Holon type lookup', await supabase.from('holon_types').select('id').eq('name', typeName).limit(2)) || [];
+      if (!matches.length) throw new Error(`Unknown Holon type: ${typeName}`);
+      if (matches.length > 1) throw new Error(`Duplicate Holon type: ${typeName}`);
+      normalized.holon_type_id = matches[0].id;
     }
     return normalized;
   }
