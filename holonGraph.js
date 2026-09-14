@@ -17,8 +17,33 @@ let featureToggleListenerInstalled = false;
 let contextMenu = null;
 let contextMenuCleanup = null;
 let hoverPreview = null;
+let hiddenNodeIds = new Set();
+let hiddenRelationshipIds = new Set();
 
 const GRAPH_DEPTH_STORAGE_KEY = 'eB-Holarchy.graphDepth';
+const GRAPH_HIDDEN_STORAGE_KEY = 'eB-Governance.graphHidden';
+
+function restorePersistedHidden() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(GRAPH_HIDDEN_STORAGE_KEY) || '{}');
+    hiddenNodeIds = new Set((saved.nodes || []).map(String));
+    hiddenRelationshipIds = new Set((saved.relationships || []).map(String));
+  } catch (_) {
+    hiddenNodeIds = new Set();
+    hiddenRelationshipIds = new Set();
+  }
+}
+
+function persistHidden() {
+  try {
+    localStorage.setItem(GRAPH_HIDDEN_STORAGE_KEY, JSON.stringify({
+      nodes: [...hiddenNodeIds],
+      relationships: [...hiddenRelationshipIds],
+    }));
+  } catch (_) {}
+}
+
+restorePersistedHidden();
 
 function setGraphBusy(busy) {
     const graph = document.getElementById('holonGraph');
@@ -260,13 +285,139 @@ function visibleHolonsByProvenance(holons) {
 
 function visibleModel() {
   const relatedHolons = relatedWithinDepth(currentRootId, currentModel.holons, currentModel.relationships);
-  const holons = visibleHolonsByProvenance(relatedHolons);
+  const holons = visibleHolonsByProvenance(relatedHolons).filter(holon => !hiddenNodeIds.has(String(holon.id)));
   const ids = new Set(holons.map(holon => String(holon.id)));
   return {
     holons,
-    relationships: currentModel.relationships.filter(r => ids.has(String(r.source_holon_id)) && ids.has(String(r.target_holon_id))),
+    relationships: currentModel.relationships.filter(r => !hiddenRelationshipIds.has(String(r.id)) && ids.has(String(r.source_holon_id)) && ids.has(String(r.target_holon_id))),
     relationshipTypes: currentModel.relationshipTypes,
   };
+}
+
+function adjacencyWithout(relationshipId = null) {
+  const neighbors = new Map();
+  const connect = (from, to, edgeId) => {
+    if (!neighbors.has(from)) neighbors.set(from, []);
+    neighbors.get(from).push({ id: to, edgeId });
+  };
+  for (const relationship of currentModel.relationships) {
+    const edgeId = String(relationship.id);
+    if (edgeId === String(relationshipId ?? '') || hiddenRelationshipIds.has(edgeId)) continue;
+    const source = String(relationship.source_holon_id || '');
+    const target = String(relationship.target_holon_id || '');
+    if (!source || !target || hiddenNodeIds.has(source) || hiddenNodeIds.has(target)) continue;
+    connect(source, target, edgeId);
+    connect(target, source, edgeId);
+  }
+  return neighbors;
+}
+
+function connectedIds(startId, relationshipId = null) {
+  const start = String(startId || '');
+  if (!start) return new Set();
+  const neighbors = adjacencyWithout(relationshipId);
+  const found = new Set([start]);
+  const queue = [start];
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    for (const neighbor of neighbors.get(queue[cursor]) || []) {
+      if (found.has(neighbor.id)) continue;
+      found.add(neighbor.id);
+      queue.push(neighbor.id);
+    }
+  }
+  return found;
+}
+
+function shortestPathToRoot(startId) {
+  if (!currentRootId || String(startId) === String(currentRootId)) return [];
+  const start = String(startId);
+  const root = String(currentRootId);
+  const neighbors = adjacencyWithout();
+  const previous = new Map([[start, null]]);
+  const queue = [start];
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const id = queue[cursor];
+    if (id === root) break;
+    for (const neighbor of neighbors.get(id) || []) {
+      if (previous.has(neighbor.id)) continue;
+      previous.set(neighbor.id, { id, edgeId: neighbor.edgeId });
+      queue.push(neighbor.id);
+    }
+  }
+  if (!previous.has(root)) return [];
+  const path = [];
+  let id = root;
+  while (id !== start) {
+    const step = previous.get(id);
+    path.push({ from: step.id, to: id, edgeId: step.edgeId });
+    id = step.id;
+  }
+  return path.reverse();
+}
+
+function directedBranchIds(startId) {
+  const found = new Set([String(startId)]);
+  const queue = [String(startId)];
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const parentId = queue[cursor];
+    for (const relationship of currentModel.relationships) {
+      if (hiddenRelationshipIds.has(String(relationship.id))) continue;
+      if (String(relationship.target_holon_id) !== parentId) continue;
+      const childId = String(relationship.source_holon_id || '');
+      if (!childId || found.has(childId)) continue;
+      found.add(childId);
+      queue.push(childId);
+    }
+  }
+  return found;
+}
+
+function applyHidden() {
+  persistHidden();
+  closeContextMenu();
+  render();
+}
+
+function hideNode(id) {
+  hiddenNodeIds.add(String(id));
+  applyHidden();
+}
+
+function hideNodeBranch(id) {
+  const nodeId = String(id);
+  const path = shortestPathToRoot(nodeId);
+  if (!path.length) {
+    directedBranchIds(nodeId).forEach(value => hiddenNodeIds.add(value));
+  } else {
+    const cutEdgeId = path[0].edgeId;
+    connectedIds(nodeId, cutEdgeId).forEach(value => hiddenNodeIds.add(value));
+    hiddenRelationshipIds.add(String(cutEdgeId));
+  }
+  applyHidden();
+}
+
+function hideRelationshipBranch(relationship) {
+  const edgeId = String(relationship.id);
+  const sourceIds = connectedIds(relationship.source_holon_id, edgeId);
+  const targetIds = connectedIds(relationship.target_holon_id, edgeId);
+  hiddenRelationshipIds.add(edgeId);
+  if ([...sourceIds].some(id => targetIds.has(id))) return applyHidden();
+  let branch;
+  if (currentRootId && sourceIds.has(String(currentRootId))) branch = targetIds;
+  else if (currentRootId && targetIds.has(String(currentRootId))) branch = sourceIds;
+  else branch = sourceIds.size <= targetIds.size ? sourceIds : targetIds;
+  branch.forEach(id => hiddenNodeIds.add(id));
+  applyHidden();
+}
+
+function restoreHidden() {
+  hiddenNodeIds.clear();
+  hiddenRelationshipIds.clear();
+  applyHidden();
+}
+
+function hiddenCount() {
+  return hiddenNodeIds.size + hiddenRelationshipIds.size;
 }
 
 function normalizeStatus(status) {
@@ -373,26 +524,32 @@ function installContextMenu() {
     const holon = kind === 'node' ? currentModel.holons.find(item => String(item.id) === String(target.data('holonId'))) : null;
     const relationship = kind === 'edge' ? target.data('relationship') : null;
     if (kind === 'node' && holon) {
-      add('Inspect Holon', () => emitSelection(holon));
+      add('Inspect Node', () => emitSelection(holon));
       add('Set as Graph Root', () => { currentRootId = String(holon.id); const control = document.getElementById('graphRoot'); if (control) control.value = holon.name || ''; render(); target.select(); emitSelection(holon); });
       if (['company', 'circle'].includes(String(holon.holon_type || '').trim().toLowerCase())) add('Operate within', () => window.dispatchEvent(new CustomEvent('holon:operatewithin', { detail: { holon } })));
-      add('Create Holon Here', () => window.dispatchEvent(new CustomEvent('holon:contextcreate', { detail: { parent: holon } })));
+      add('Create Node Here', () => window.dispatchEvent(new CustomEvent('holon:contextcreate', { detail: { parent: holon } })));
       add('New Relationship', () => document.getElementById('newRelationship')?.click());
+      add('Hide Node', () => hideNode(holon.id));
+      add('Hide Branch', () => hideNodeBranch(holon.id));
       separator();
-      add('Edit Holon', () => window.dispatchEvent(new CustomEvent('holon:contextedit', { detail: { holon } })));
-      add('Delete Holon', () => window.dispatchEvent(new CustomEvent('holon:contextdelete', { detail: { holon } })), true);
+      add('Edit Node', () => window.dispatchEvent(new CustomEvent('holon:contextedit', { detail: { holon } })));
+      add('Delete Node', () => window.dispatchEvent(new CustomEvent('holon:contextdelete', { detail: { holon } })), true);
     } else if (kind === 'edge' && relationship) {
       add('Inspect Relationship', () => window.dispatchEvent(new CustomEvent('relationship:selected', { detail: relationship })));
+      add('Hide Relationship', () => { hiddenRelationshipIds.add(String(relationship.id)); applyHidden(); });
+      add('Hide Connected Branch', () => hideRelationshipBranch(relationship));
       add('Delete Relationship', event => {
         if (!container.hasAttribute('tabindex')) container.tabIndex = -1;
         window.dispatchEvent(new CustomEvent('relationship:contextdelete', { detail: { relationship, x: event.detail ? event.clientX : x, y: event.detail ? event.clientY : y, returnFocus: container } }));
       }, true);
     } else {
-      add('New Holon', () => window.dispatchEvent(new CustomEvent('holon:contextcreate')));
+      add('New Node', () => window.dispatchEvent(new CustomEvent('holon:contextcreate')));
+      if (hiddenCount()) add(`Restore Hidden (${hiddenCount()})`, restoreHidden);
     }
-    menu.style.left = `${Math.min(x, window.innerWidth - 210)}px`;
-    menu.style.top = `${Math.min(y, window.innerHeight - 180)}px`;
     document.body.appendChild(menu);
+    const rect = menu.getBoundingClientRect();
+    menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - rect.width - 8))}px`;
+    menu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - rect.height - 8))}px`;
     contextMenu = menu;
   }
   const onContext = event => {
