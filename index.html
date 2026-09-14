@@ -96,6 +96,7 @@
         await import('./CFstatus.js').then(({ CFstatus }) => { window.ebCFStatus = CFstatus.init(); });
         await import('./fcoseAdapter.js');
         await import(`./app.js?v=${Date.now()}`);
+        await import('./eBTerminology.js').then(({ initTerminology }) => initTerminology());
         await import('./eBHolarchyFilter.js').then(({ initHolarchyFilter }) => initHolarchyFilter());
         await import('./coseTuner.js').then(({ initCoseTuner }) => initCoseTuner());
         await import('./relationshipInspector.js');
