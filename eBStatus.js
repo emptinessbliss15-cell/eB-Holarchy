@@ -90,7 +90,7 @@ function installModelLoadedHandler()
   {
     const holonCount = Number(event.detail?.holons) || 0;
     const relationshipCount = Number(event.detail?.relationships) || 0;
-    addEntry(`${holonCount} Holons · ${relationshipCount} relationships`, 'info');
+    addEntry(`${holonCount} Nodes · ${relationshipCount} relationships`, 'info');
   });
 
   modelLoadedHandlerInstalled = true;
