@@ -371,7 +371,27 @@ export function createEBSupabase()
       clear() { impersonatedActor = null; emitChange('eB:actorChanged', { actor: null }); },
     },
     toggles: { async list() { const userId = await currentUserId(); if (!userId) return []; return result('Feature toggles', await supabase.from('user_feature_toggles').select('feature_name, enabled, updated_at').eq('user_id', userId).order('feature_name')) || []; }, async set(name, enabled) { const userId = await currentUserId(); if (!userId) throw new Error('A signed-in user is required to change feature toggles'); return result('Feature toggle', await supabase.from('user_feature_toggles').upsert({ user_id: userId, feature_name: String(name), enabled: enabled === true }, { onConflict: 'user_id,feature_name' }).select().single()); }, async reset(name) { const userId = await currentUserId(); if (!userId) throw new Error('A signed-in user is required to reset a feature toggle'); return result('Feature toggle', await supabase.from('user_feature_toggles').delete().eq('user_id', userId).select('feature_name').maybeSingle()); } },
-    model: { async load() { const [holons, relationships, relationshipTypes, holonTypes] = await Promise.all([supabase.from('holons_view').select('*').order('created_at'), supabase.from('relationships_view').select('*').order('position').order('created_at'), supabase.from('relationship_types').select('*').order('name'), supabase.from('holon_types').select('*').order('name')]); return { holons: result('Holons', holons) || [], relationships: result('Relationships', relationships) || [], relationshipTypes: result('Relationship types', relationshipTypes) || [], holonTypes: result('Holon types', holonTypes) || [] }; } },
+    model: {
+      async load() {
+        const pageSize = 1000;
+        const selectAll = async (label, queryForPage) => {
+          const rows = [];
+          for (let from = 0; ; from += pageSize) {
+            const page = result(label, await queryForPage().range(from, from + pageSize - 1)) || [];
+            rows.push(...page);
+            if (page.length < pageSize) break;
+          }
+          return rows;
+        };
+        const [holons, relationships, relationshipTypes, holonTypes] = await Promise.all([
+          selectAll('Nodes', () => supabase.from('holons_view').select('*').order('created_at').order('id')),
+          selectAll('Relationships', () => supabase.from('relationships_view').select('*').order('position').order('created_at').order('id')),
+          selectAll('Relationship types', () => supabase.from('relationship_types').select('*').order('name').order('id')),
+          selectAll('Node types', () => supabase.from('holon_types').select('*').order('name').order('id')),
+        ]);
+        return { holons, relationships, relationshipTypes, holonTypes };
+      },
+    },
     holons: { async create(values) { return createProvenance('create', JSON.stringify({ entity: 'holon', operation: 'create', values })); }, async get(holonId) { return result('Holon', await supabase.from('holons_view').select('*').eq('id', holonId).single()); }, async update(holonId, values) { return createProvenance('update', JSON.stringify({ entity: 'holon', operation: 'update', targetId: holonId, values }), holonId); }, async delete(holonId) { return createProvenance('delete', JSON.stringify({ entity: 'holon', operation: 'delete', targetId: holonId }), holonId); } },
     holonTypes: { async create(values) { const name = String(values?.name ?? '').trim(); if (!name) throw new Error('Holon type name is required'); const description = String(values?.description ?? '').trim(); return result('Holon type', await supabase.from('holon_types').insert({ name, description }).select().single()); } },
     relationshipTypes: { async create(values) { const name = String(values?.name ?? '').trim(); if (!name) throw new Error('Relationship type name is required'); const description = String(values?.description ?? '').trim(); return result('Relationship type', await supabase.from('relationship_types').insert({ name, description }).select().single()); } },
