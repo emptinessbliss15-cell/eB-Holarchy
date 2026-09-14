@@ -18,17 +18,17 @@ function closeModal(modal, result = null)
 async function addHolonType(field, combo)
 {
   const values = await showModal({
-    title: 'New Holon Type',
+    title: 'New Node Type',
     submitLabel: 'Create Type',
     fields: [
       { name: 'name', label: 'Name', required: true, placeholder: 'e.g. Service' },
-      { name: 'description', label: 'Description', placeholder: 'What kind of Holon is this?' },
+      { name: 'description', label: 'Description', placeholder: 'What kind of node is this?' },
     ],
   });
   const name = values?.name?.trim();
   if (!name) return;
 
-  eBStatus.info(`Creating Holon type ${name}…`);
+  eBStatus.info(`Creating node type ${name}…`);
   try
   {
     await eBliss.holonTypes.create({ name, description: values.description?.trim() || '' });
@@ -37,12 +37,12 @@ async function addHolonType(field, combo)
       options.push({ value: name, label: name });
     options.sort((a, b) => String(a.label).localeCompare(String(b.label), undefined, { sensitivity: 'base' }));
     combo?.setValue?.(name, true);
-    eBStatus.success(`Created Holon type ${name}`);
+    eBStatus.success(`Created node type ${name}`);
     window.dispatchEvent(new CustomEvent('eB:modelChanged'));
   }
   catch (error)
   {
-    eBStatus.error(error?.message || 'Unable to create Holon type');
+    eBStatus.error(error?.message || 'Unable to create node type');
   }
 }
 
@@ -106,7 +106,7 @@ export function showModal({ title, fields = [], submitLabel = 'Save', cancelLabe
       control.required = field.type === 'combobox' && field.multiple ? false : !!field.required;
       if (field.placeholder) control.placeholder = field.placeholder;
 
-      const hasAddAction = title === 'New Holon' && field.type === 'combobox' && field.name === 'holon_type';
+      const hasAddAction = title === 'New Node' && field.type === 'combobox' && field.name === 'holon_type';
       let actionButton = null;
       if (hasAddAction)
       {
@@ -119,8 +119,8 @@ export function showModal({ title, fields = [], submitLabel = 'Save', cancelLabe
         actionButton = document.createElement('button');
         actionButton.type = 'button';
         actionButton.textContent = '…';
-        actionButton.title = 'Add Holon type';
-        actionButton.setAttribute('aria-label', 'Add Holon type');
+        actionButton.title = 'Add node type';
+        actionButton.setAttribute('aria-label', 'Add node type');
         actionButton.style.alignSelf = 'stretch';
         actionButton.style.minWidth = '36px';
         row.appendChild(actionButton);
