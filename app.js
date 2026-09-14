@@ -286,9 +286,9 @@ function loadModel() {
 }
 function wireUI() {
   createEBAddButton(elements.addButton, { items: [
-    { label: 'Holon', onSelect: () => void createHolon() },
+    { label: 'Node', onSelect: () => void createHolon() },
     { label: 'Relationship', onSelect: () => void createRelationship() },
-    { label: 'Holon Type', onSelect: () => void createHolonType() },
+    { label: 'Node Type', onSelect: () => void createHolonType() },
     { label: 'Relationship Type', onSelect: () => void createRelationshipType() },
   ] });
   elements.refresh?.addEventListener('click', () => void loadModel()); elements.refreshApp?.addEventListener('click', () => window.location.reload()); elements.debugApp?.addEventListener('click', () => console.log({ holons, relationships, relationshipTypes, holonTypes }));
