@@ -53,11 +53,26 @@ export function renderCircleView({ container, context, holons = [], relationship
   const namedRelationships = relationships.map(relationship => ({ relationship, name: normalized(relationshipName(relationship, relationshipTypes)) }));
   const candidatesByParent = new Map();
   for (const item of namedRelationships) {
+    const source = byId.get(String(item.relationship.source_holon_id));
+    const target = byId.get(String(item.relationship.target_holon_id));
+    if (!source || !target) continue;
+
     const inverse = INVERSE_STRUCTURAL_NAMES.has(item.name);
-    const childId = inverse ? item.relationship.target_holon_id : item.relationship.source_holon_id;
-    const parentId = inverse ? item.relationship.source_holon_id : item.relationship.target_holon_id;
-    const child = byId.get(String(childId)); const parent = byId.get(String(parentId));
-    if (!child || !parent || (!isCircle(child) && !isRole(child)) || !isCircle(parent)) continue;
+    let child = inverse ? target : source;
+    let parent = inverse ? source : target;
+
+    // A Role is always contained by a Circle. Infer that containment from node
+    // types so Circle view remains correct even when the relationship is stored
+    // in the opposite endpoint direction.
+    if (isRole(source) && isCircle(target)) {
+      child = source;
+      parent = target;
+    } else if (isCircle(source) && isRole(target)) {
+      child = target;
+      parent = source;
+    }
+
+    if ((!isCircle(child) && !isRole(child)) || !isCircle(parent)) continue;
     const key = String(parent.id);
     if (!candidatesByParent.has(key)) candidatesByParent.set(key, []);
     candidatesByParent.get(key).push({ ...item, child, parent, structural: STRUCTURAL_NAMES.has(item.name) || inverse });
