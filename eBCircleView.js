@@ -80,7 +80,7 @@ export function renderCircleView({ container, context, holons = [], relationship
     { label: 'Role', onSelect: () => onCreate?.('Role', active) },
     { label: 'Tension', onSelect: () => onCreate?.('Tension', active) },
     { label: 'Process', onSelect: () => onCreate?.('Process', active) },
-    { label: 'Holon', onSelect: () => onCreate?.('', active) },
+    { label: 'Node', onSelect: () => onCreate?.('', active) },
     { label: 'Relationship', onSelect: () => onCreateRelationship?.(active) },
   ] });
 
