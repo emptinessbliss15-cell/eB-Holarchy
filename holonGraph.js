@@ -17,6 +17,8 @@ let featureToggleListenerInstalled = false;
 let contextMenu = null;
 let contextMenuCleanup = null;
 let hoverPreview = null;
+let viewportResizeObserver = null;
+let viewportResizeFrame = 0;
 let hiddenNodeIds = new Set();
 let hiddenRelationshipIds = new Set();
 
@@ -110,8 +112,8 @@ function installStyles() {
     #holonGraph {
         position: relative;
         width: 100%; 
-        height: calc(100vh - 190px);
-        min-height: 480px;
+        height: var(--eb-graph-viewport-height, calc(100dvh - 190px));
+        min-height: 0;
         border: 1px solid var(--eb-border);
         border-radius: 6px;
         background: var(--eb-bg);
@@ -138,9 +140,40 @@ function installStyles() {
     .holon-hover-title { font-size: 13px; font-weight: 700; margin-bottom: 2px; overflow-wrap: anywhere; }
     .holon-hover-type { font-size: 11px; opacity: .68; margin-bottom: 6px; }
     .holon-hover-content { white-space: pre-wrap; overflow-wrap: anywhere; }
-    @media (max-width: 760px) { .graph-context { min-width: 0; flex: 1; } .graph-context .hcg-autocomplete { min-width: 0; } #holonGraph { height: 55vh; min-height: 360px; } }
+    @media (max-width: 760px) { .graph-context { min-width: 0; flex: 1; } .graph-context .hcg-autocomplete { min-width: 0; } }
   `;
   document.head.appendChild(style);
+}
+
+function fitGraphToViewport() {
+  const graph = document.getElementById('holonGraph');
+  if (!graph || graph.hidden || !graph.offsetParent) return;
+  const viewportHeight = window.visualViewport?.height || document.documentElement.clientHeight;
+  const top = graph.getBoundingClientRect().top;
+  const bottomGap = 12;
+  const availableHeight = Math.max(0, Math.floor(viewportHeight - top - bottomGap));
+  graph.style.setProperty('--eb-graph-viewport-height', `${availableHeight}px`);
+  cy?.resize?.();
+}
+
+function scheduleGraphViewportFit() {
+  cancelAnimationFrame(viewportResizeFrame);
+  viewportResizeFrame = requestAnimationFrame(fitGraphToViewport);
+}
+
+function installViewportSizing() {
+  if (viewportResizeObserver) return;
+  window.addEventListener('resize', scheduleGraphViewportFit);
+  window.visualViewport?.addEventListener('resize', scheduleGraphViewportFit);
+  viewportResizeObserver = new ResizeObserver(scheduleGraphViewportFit);
+  [
+    document.getElementById('header'),
+    document.getElementById('status'),
+    document.querySelector('#app > .eb-operating-nav'),
+    document.querySelector('.workspace-grids'),
+    document.querySelector('.holarchy-heading'),
+  ].filter(Boolean).forEach(element => viewportResizeObserver.observe(element));
+  scheduleGraphViewportFit();
 }
 
 function installStatusLegend() {
@@ -627,6 +660,7 @@ export function createHolonGraph({ element, holons = [], relationships = [], rel
   installStyles();
   installStatusLegend();
   installFeatureToggleListener();
+  installViewportSizing();
   if (!element) return null;
   if (!cy) {
     cy = window.cytoscape({ container: element, elements: [], style: [
@@ -657,6 +691,11 @@ export function destroyHolonGraph() {
 
     contextMenuCleanup?.();
     contextMenuCleanup = null;
+    cancelAnimationFrame(viewportResizeFrame);
+    viewportResizeObserver?.disconnect();
+    viewportResizeObserver = null;
+    window.removeEventListener('resize', scheduleGraphViewportFit);
+    window.visualViewport?.removeEventListener('resize', scheduleGraphViewportFit);
     hideHoverPreview();
     if (cy) cy.destroy();
     cy = null;

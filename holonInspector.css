@@ -52,13 +52,13 @@
 .holon-property-grid { min-height: 0; }
 
 #holonGraph {
-  height: var(--eb-workspace-pane-height);
-  min-height: 460px;
+  height: var(--eb-graph-viewport-height, var(--eb-workspace-pane-height));
+  min-height: 0;
 }
 
 @media (max-width: 760px) {
   .workspace-primary { min-height: 0; }
-  #holonGraph { height: 460px; }
+  #holonGraph { height: var(--eb-graph-viewport-height, 460px); }
   .holon-inspector { height: 460px; }
   .panel-document { height: 460px; margin-top: 0 !important; }
 }
