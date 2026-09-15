@@ -233,8 +233,32 @@ function escapeHtml(value) {
 }
 
 function hoverContentFor(holon) {
-  const value = holon?.content ?? holon?.description ?? holon?.body ?? holon?.summary ?? holon?.notes ?? '';
-  const text = String(value ?? '').trim();
+  const value = holon?.Content ?? holon?.content ?? holon?.description ?? holon?.body ?? holon?.summary ?? holon?.notes ?? '';
+  let text = String(value ?? '').trim();
+  if (text.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const lines = [];
+        const legacyContent = String(parsed._legacyContent ?? '').trim();
+        if (legacyContent) lines.push(legacyContent);
+        for (const [fieldId, fieldValue] of Object.entries(parsed._eBFields || {})) {
+          if (fieldValue === null || fieldValue === undefined || fieldValue === '') continue;
+          const field = currentModel.holons.find(item => String(item.id) === String(fieldId));
+          const label = field?.name || 'Field';
+          const displayValue = typeof fieldValue === 'object' ? JSON.stringify(fieldValue) : String(fieldValue);
+          lines.push(`${label}: ${displayValue}`);
+        }
+        for (const [key, itemValue] of Object.entries(parsed)) {
+          if (key.startsWith('_') || itemValue === null || itemValue === undefined || itemValue === '') continue;
+          const label = key.replaceAll('_', ' ').replace(/\b\w/g, character => character.toUpperCase());
+          const displayValue = typeof itemValue === 'object' ? JSON.stringify(itemValue) : String(itemValue);
+          lines.push(`${label}: ${displayValue}`);
+        }
+        text = lines.join('\n');
+      }
+    } catch { /* Plain text which happens to begin with a brace. */ }
+  }
   if (!text) return '';
   return text.length > 240 ? `${text.slice(0, 237).trimEnd()}…` : text;
 }
