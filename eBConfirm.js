@@ -3,7 +3,7 @@ let nextId = 0;
 
 // Client (viewport) coordinates are optional; keyboard callers anchor to focus.
 // Opening another confirmation safely cancels the previous pending request.
-export function eBConfirm({ message, title, confirmLabel = 'Confirm', cancelLabel = 'Cancel', x, y, returnFocus } = {})
+export function eBConfirm({ message, title, confirmLabel = 'Confirm', cancelLabel = 'Cancel', choices = null, x, y, returnFocus } = {})
 {
   activeConfirm?.();
   const previousFocus = returnFocus || document.activeElement;
@@ -31,14 +31,21 @@ export function eBConfirm({ message, title, confirmLabel = 'Confirm', cancelLabe
     description.textContent = message ?? '';
     const actions = document.createElement('div');
     actions.className = 'eb-confirm-actions';
-    const cancel = document.createElement('button');
-    cancel.type = 'button';
-    cancel.textContent = cancelLabel;
-    cancel.autofocus = true;
-    const confirm = document.createElement('button');
-    confirm.type = 'button';
-    confirm.textContent = confirmLabel;
-    actions.append(cancel, confirm);
+    const choiceDefinitions = Array.isArray(choices) && choices.length ? choices : [
+      { label: cancelLabel, value: false, autofocus: true },
+      { label: confirmLabel, value: true },
+    ];
+    const actionButtons = choiceDefinitions.map(choice =>
+    {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = choice.label;
+      button.autofocus = Boolean(choice.autofocus);
+      if (choice.className) button.className = choice.className;
+      actions.appendChild(button);
+      return { button, value: choice.value };
+    });
+    const defaultChoice = actionButtons.find((_item, index) => choiceDefinitions[index].autofocus) || actionButtons[0];
     dialog.append(description, actions);
     let settled = false;
     function finish(result)
@@ -67,10 +74,9 @@ export function eBConfirm({ message, title, confirmLabel = 'Confirm', cancelLabe
       dialog.style.left = `${Math.max(left, Math.min(anchorX + 8, left + width - rect.width))}px`;
       dialog.style.top = `${Math.max(top, Math.min(anchorY + 8, top + height - rect.height))}px`;
     }
-    cancel.addEventListener('click', () => finish(false));
-    confirm.addEventListener('click', () => finish(true));
-    dialog.addEventListener('cancel', event => { event.preventDefault(); finish(false); });
-    dialog.addEventListener('close', () => finish(false));
+    actionButtons.forEach(item => item.button.addEventListener('click', () => finish(item.value)));
+    dialog.addEventListener('cancel', event => { event.preventDefault(); finish(defaultChoice.value); });
+    dialog.addEventListener('close', () => finish(defaultChoice.value));
     let outsidePointer = false;
     const isOutside = event =>
     {
@@ -78,18 +84,21 @@ export function eBConfirm({ message, title, confirmLabel = 'Confirm', cancelLabe
       return event.target === dialog && (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom);
     };
     dialog.addEventListener('pointerdown', event => { outsidePointer = isOutside(event); });
-    dialog.addEventListener('click', event => { if (outsidePointer && isOutside(event)) finish(false); outsidePointer = false; });
+    dialog.addEventListener('click', event => { if (outsidePointer && isOutside(event)) finish(defaultChoice.value); outsidePointer = false; });
     dialog.addEventListener('keydown', event =>
     {
       if (event.key !== 'Tab') return;
       event.preventDefault();
-      (document.activeElement === cancel ? confirm : cancel).focus();
+      const currentIndex = actionButtons.findIndex(item => item.button === document.activeElement);
+      const direction = event.shiftKey ? -1 : 1;
+      const nextIndex = (currentIndex + direction + actionButtons.length) % actionButtons.length;
+      actionButtons[nextIndex].button.focus();
     });
     document.body.appendChild(dialog);
-    activeConfirm = () => finish(false);
+    activeConfirm = () => finish(defaultChoice.value);
     dialog.showModal();
     position();
-    cancel.focus({ preventScroll: true });
+    defaultChoice.button.focus({ preventScroll: true });
     window.addEventListener('resize', position);
     window.visualViewport?.addEventListener('resize', position);
     window.visualViewport?.addEventListener('scroll', position);

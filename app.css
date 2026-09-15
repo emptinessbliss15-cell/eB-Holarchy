@@ -203,4 +203,5 @@ p.eb-document-content-block { margin: .6rem 0; line-height: 1.55; }
 .eb-confirm-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .eb-confirm-actions button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; padding: 7px 12px; border: 1px solid var(--eb-border-strong); border-radius: 5px; background: var(--eb-input-bg); color: var(--eb-text); cursor: pointer; }
 .eb-confirm-actions button:last-child { font-weight: 600; }
+.eb-confirm-actions button.danger { border-color: #b91c1c; color: #b91c1c; }
 .eb-confirm-actions button:focus-visible { outline: 2px solid var(--eb-accent, #5b8def); outline-offset: 2px; }
