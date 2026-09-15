@@ -25,6 +25,7 @@ let hiddenNodeIds = new Set();
 let hiddenRelationshipIds = new Set();
 let graphDisplayMode = 'edges';
 let nestingRelationshipTypeIds = new Set();
+let nestingContainerShape = 'circles';
 let nestingReport = { nestedCount: 0, conflicts: [], cycles: [] };
 
 const GRAPH_DEPTH_STORAGE_KEY = 'eB-Holarchy.graphDepth';
@@ -579,6 +580,7 @@ function buildElements(holons, relationships, relationshipTypes) {
     type: holon.holon_type || 'Holon',
     holonId: holon.id,
     status: normalizeStatus(holon.status),
+    containerShape: nestingContainerShape,
     nestingReason: nesting.reasons.get(String(holon.id)) || '',
     ...(nesting.parents.has(String(holon.id)) ? { parent: nesting.parents.get(String(holon.id)) } : {}),
   } }));
@@ -825,6 +827,13 @@ function render() {
 
     cy.one('layoutstop', () => {
         if (generation === renderGeneration) {
+            if (graphDisplayMode === 'nested' && nestingContainerShape !== 'rounded') {
+              cy.nodes(':parent').forEach(node => {
+                const box = node.boundingBox({ includeLabels: false, includeOverlays: false });
+                const size = Math.ceil(Math.max(box.w, box.h));
+                node.style({ 'min-width': size, 'min-height': size });
+              });
+            }
             setGraphBusy(false);
         }
     });
@@ -848,6 +857,9 @@ export function createHolonGraph({ element, holons = [], relationships = [], rel
     cy = window.cytoscape({ container: element, elements: [], style: [
       { selector: 'node', style: { 'label': 'data(label)', 'text-valign': 'center', 'text-halign': 'center', 'background-color': '#5b8def', 'color': '#fff', 'font-size': 11, 'width': 42, 'height': 42, 'text-wrap': 'wrap', 'text-max-width': 70 } },
       { selector: '$node > node', style: { 'background-opacity': 0.18, 'border-width': 2, 'border-color': '#5b8def', 'padding': 24, 'text-valign': 'top', 'text-halign': 'center' } },
+      { selector: '$node > node[containerShape = "rounded"]', style: { 'shape': 'roundrectangle' } },
+      { selector: '$node > node[containerShape = "circles"]', style: { 'shape': 'ellipse' } },
+      { selector: '$node > node[containerShape = "concentric"]', style: { 'shape': 'ellipse', 'background-opacity': 0.04, 'border-width': 3 } },
       { selector: 'edge', style: { 'curve-style': 'bezier', 'target-arrow-shape': 'triangle', 'line-color': '#999', 'target-arrow-color': '#999', 'width': 2, 'label': 'data(label)', 'font-size': 9, 'text-background-color': '#fff', 'text-background-opacity': 0.7, 'text-background-padding': 2 } },
       { selector: ':selected', style: { 'overlay-color': '#f59e0b', 'overlay-opacity': 0.18, 'overlay-padding': 5 } },
     ] });
@@ -904,9 +916,10 @@ export function setShowProvenance(value) {
   render();
 }
 
-export function setGraphDisplay({ mode = 'edges', relationshipTypeIds = [] } = {}) {
+export function setGraphDisplay({ mode = 'edges', relationshipTypeIds = [], containerShape = 'circles' } = {}) {
   graphDisplayMode = mode === 'nested' ? 'nested' : 'edges';
   nestingRelationshipTypeIds = new Set(relationshipTypeIds.map(String));
+  nestingContainerShape = ['rounded', 'circles', 'concentric'].includes(containerShape) ? containerShape : 'circles';
   render();
 }
 
@@ -914,6 +927,7 @@ export function getGraphDisplay() {
   return {
     mode: graphDisplayMode,
     relationshipTypeIds: [...nestingRelationshipTypeIds],
+    containerShape: nestingContainerShape,
     report: nestingReport,
   };
 }

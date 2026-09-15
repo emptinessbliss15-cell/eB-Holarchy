@@ -1,4 +1,4 @@
-import { eBliss } from './eBSDK.js';
+import { eBPreferences } from './eBPreferences.js';
 import { getGraphDisplay, getHolonGraphModel, setGraphDisplay } from './holonGraph.js';
 
 const STORAGE_KEY = 'eB-Governance.graphDisplay';
@@ -16,7 +16,6 @@ const DEFAULT_NESTING_NAMES = new Set([
 let state = loadLocalState();
 let panel = null;
 let reportElement = null;
-let profileSaveTimer = 0;
 
 function loadLocalState() {
   try {
@@ -24,10 +23,11 @@ function loadLocalState() {
     return {
       mode: stored.mode === 'nested' ? 'nested' : 'edges',
       relationshipTypeIds: Array.isArray(stored.relationshipTypeIds) ? stored.relationshipTypeIds.map(String) : [],
+      containerShape: ['rounded', 'circles', 'concentric'].includes(stored.containerShape) ? stored.containerShape : 'circles',
       configured: stored.configured === true,
     };
   } catch {
-    return { mode: 'edges', relationshipTypeIds: [], configured: false };
+    return { mode: 'edges', relationshipTypeIds: [], containerShape: 'circles', configured: false };
   }
 }
 
@@ -35,16 +35,8 @@ function saveLocalState() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
 }
 
-function saveProfileState() {
-  return eBliss.profile.setPreference(PROFILE_KEY, state);
-}
-
 function scheduleProfileSave() {
-  clearTimeout(profileSaveTimer);
-  profileSaveTimer = window.setTimeout(() => {
-    profileSaveTimer = 0;
-    void saveProfileState().catch(error => window.ebStatus?.error?.(error?.message || 'Unable to save graph display settings'));
-  }, 250);
+  eBPreferences.schedule(PROFILE_KEY, state, { errorMessage: 'Unable to save graph display settings' });
 }
 
 function defaultRelationshipTypeIds() {
@@ -61,26 +53,28 @@ function ensureDefaults() {
 function applyState() {
   ensureDefaults();
   saveLocalState();
-  setGraphDisplay({ mode: state.mode, relationshipTypeIds: state.relationshipTypeIds });
+  setGraphDisplay({ mode: state.mode, relationshipTypeIds: state.relationshipTypeIds, containerShape: state.containerShape });
   document.querySelectorAll('[data-graph-display-mode]').forEach(button => {
     const selected = button.dataset.graphDisplayMode === state.mode;
     button.classList.toggle('is-active', selected);
     button.setAttribute('aria-pressed', String(selected));
   });
+  document.querySelectorAll('[name="graphContainerShape"]').forEach(input => {
+    input.checked = input.value === state.containerShape;
+  });
 }
 
 async function loadProfileState() {
-  const preferences = await eBliss.profile.preferences();
-  if (preferences === null) return;
-  const remote = preferences[PROFILE_KEY];
+  const remote = await eBPreferences.get(PROFILE_KEY);
   if (remote && typeof remote === 'object') {
     state = {
       mode: remote.mode === 'nested' ? 'nested' : 'edges',
       relationshipTypeIds: Array.isArray(remote.relationshipTypeIds) ? remote.relationshipTypeIds.map(String) : [],
+      containerShape: ['rounded', 'circles', 'concentric'].includes(remote.containerShape) ? remote.containerShape : 'circles',
       configured: remote.configured === true,
     };
   } else if (state.configured || state.mode === 'nested') {
-    await saveProfileState();
+    await eBPreferences.set(PROFILE_KEY, state);
   }
   applyState();
   renderRelationshipChoices();
@@ -101,6 +95,9 @@ function installStyles() {
     .eb-graph-display-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:5px; font-weight:700; }
     .eb-graph-display-head button { border:0; background:transparent; color:inherit; cursor:pointer; font-size:16px; }
     .eb-graph-display-help { margin:0 0 9px; font-size:11px; opacity:.75; }
+    .eb-graph-display-shapes { display:flex; flex-wrap:wrap; gap:5px; margin:0 0 9px; padding:0 0 9px; border:0; border-bottom:1px solid var(--eb-border,#aaa); }
+    .eb-graph-display-shapes legend { width:100%; padding:0; font-size:11px; font-weight:700; }
+    .eb-graph-display-shapes label { display:flex; align-items:center; gap:3px; font-size:11px; }
     .eb-graph-display-types { display:grid; gap:3px; }
     .eb-graph-display-type { display:flex; align-items:center; gap:7px; padding:4px 5px; border-radius:4px; font-size:12px; cursor:pointer; }
     .eb-graph-display-type:hover { background:var(--eb-hover,#eee); }
@@ -193,9 +190,17 @@ export async function initGraphDisplay() {
   panel = document.createElement('div');
   panel.className = 'eb-graph-display-panel';
   panel.hidden = true;
-  panel.innerHTML = '<div class="eb-graph-display-head"><span>Nested Relationships</span><button type="button" aria-label="Close">×</button></div><p class="eb-graph-display-help">Checked relationship types place the source node inside the target node. Other relationships remain edges.</p><div class="eb-graph-display-types"></div><div class="eb-graph-display-report"></div>';
+  panel.innerHTML = '<div class="eb-graph-display-head"><span>Nested Relationships</span><button type="button" aria-label="Close">×</button></div><p class="eb-graph-display-help">Checked relationship types place the source node inside the target node. Other relationships remain edges.</p><fieldset class="eb-graph-display-shapes"><legend>Container shape</legend><label><input type="radio" name="graphContainerShape" value="rounded">Rounded</label><label><input type="radio" name="graphContainerShape" value="circles">Circles</label><label><input type="radio" name="graphContainerShape" value="concentric">Concentric</label></fieldset><div class="eb-graph-display-types"></div><div class="eb-graph-display-report"></div>';
   panel.querySelector('.eb-graph-display-head button').addEventListener('click', () => { panel.hidden = true; });
   reportElement = panel.querySelector('.eb-graph-display-report');
+  panel.querySelectorAll('[name="graphContainerShape"]').forEach(input => {
+    input.addEventListener('change', () => {
+      if (!input.checked) return;
+      state.containerShape = input.value;
+      applyState();
+      scheduleProfileSave();
+    });
+  });
   settingsButton.addEventListener('click', () => { panel.hidden = !panel.hidden; });
 
   const graphPanel = graph.parentElement;
@@ -219,6 +224,9 @@ export async function initGraphDisplay() {
     if (!wasConfigured) applyState();
   });
   window.addEventListener('holonGraph:nestingReport', event => renderReport(event.detail));
+  window.addEventListener('preferences:profileChanged', () => {
+    void loadProfileState().catch(error => window.ebStatus?.error?.(error?.message || 'Unable to load graph display settings'));
+  });
   document.addEventListener('click', event => {
     if (panel.hidden || panel.contains(event.target) || tools.contains(event.target)) return;
     panel.hidden = true;

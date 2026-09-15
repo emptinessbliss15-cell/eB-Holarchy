@@ -1,5 +1,5 @@
 import { getHolonGraph } from './holonGraph.js';
-import { eBliss } from './eBSDK.js';
+import { eBPreferences } from './eBPreferences.js';
 
 const STORAGE_KEY = 'eB-Holarchy.coseOptions';
 const PRESETS_STORAGE_KEY = 'eB-Holarchy.cosePresets';
@@ -23,7 +23,6 @@ function loadValues() {
 let values = loadValues();
 let presets = loadPresets();
 let panel = null;
-let profileSaveTimer = 0;
 
 function loadPresets() {
   try {
@@ -48,24 +47,14 @@ function localStateIsCustomized() {
   return Object.keys(presets).length > 0 || !sameValues(values, defaults);
 }
 
-async function saveProfileState() {
-  await eBliss.profile.setPreference('graph.cose', { values, presets });
-}
-
 function scheduleProfileSave() {
-  clearTimeout(profileSaveTimer);
-  profileSaveTimer = window.setTimeout(() => {
-    profileSaveTimer = 0;
-    void saveProfileState().catch(error => window.ebStatus?.error?.(error?.message || 'Unable to save COSE settings'));
-  }, 250);
+  eBPreferences.schedule('graph.cose', { values, presets }, { errorMessage: 'Unable to save COSE settings' });
 }
 
 async function loadProfileState() {
-  const preferences = await eBliss.profile.preferences();
-  if (preferences === null) return;
-  const remote = preferences['graph.cose'];
+  const remote = await eBPreferences.get('graph.cose');
   if (!remote || typeof remote !== 'object') {
-    if (localStateIsCustomized()) await saveProfileState();
+    if (localStateIsCustomized()) await eBPreferences.set('graph.cose', { values, presets });
     return;
   }
   const localPresets = presets;
@@ -73,7 +62,7 @@ async function loadProfileState() {
   presets = { ...localPresets, ...(remote.presets || {}) };
   saveValues();
   savePresets();
-  if (!sameValues(presets, remote.presets || {})) await saveProfileState();
+  if (!sameValues(presets, remote.presets || {})) await eBPreferences.set('graph.cose', { values, presets });
 }
 
 function runLayout() {
@@ -227,6 +216,14 @@ export async function initCoseTuner() {
   });
   actions.append(apply, reset);
   panel.appendChild(actions);
+
+  window.addEventListener('preferences:profileChanged', () => {
+    void loadProfileState().then(() => {
+      renderPresets();
+      syncFields();
+      runLayout();
+    }).catch(error => window.ebStatus?.error?.(error?.message || 'Unable to load COSE settings'));
+  });
 
   button.addEventListener('click', () => { panel.hidden = !panel.hidden; });
   const graphPanel = graph.parentElement;
