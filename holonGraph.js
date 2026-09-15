@@ -16,6 +16,7 @@ let navigationInstalled = false;
 let featureToggleListenerInstalled = false;
 let contextMenu = null;
 let contextMenuCleanup = null;
+let graphInteractionsCleanup = null;
 let hoverPreview = null;
 let viewportResizeObserver = null;
 let viewportResizeFrame = 0;
@@ -108,7 +109,19 @@ function installStyles() {
         background: var(--eb-input-bg);
         color: var(--eb-text);
     }
-    #graphUp { white-space: nowrap; }
+    #graphUp {
+        display: inline-flex;
+        align-items: center;
+        flex: 0 0 auto;
+        min-height: 30px;
+        padding: 3px 8px;
+        white-space: nowrap;
+        border: 0;
+        border-left: 1px solid var(--eb-border, #ccc);
+        background: transparent;
+        color: var(--eb-text, #222);
+    }
+    #graphUp:disabled { opacity: .45; cursor: default; }
     #holonGraph {
         position: relative;
         width: 100%; 
@@ -585,6 +598,18 @@ function installContextMenu() {
     menu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - rect.height - 8))}px`;
     contextMenu = menu;
   }
+  function targetAtClientPoint(clientX, clientY) {
+    if (!cy) return null;
+    const rect = container.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    const nodes = cy.nodes(':visible').filter(node => {
+      const box = node.renderedBoundingBox({ includeLabels: true, includeOverlays: true });
+      return x >= box.x1 && x <= box.x2 && y >= box.y1 && y <= box.y2;
+    });
+    if (nodes.length) return nodes[nodes.length - 1];
+    return null;
+  }
   const onContext = event => {
     event.preventDefault();
     const rendered = event.position || { x: 0, y: 0 };
@@ -592,12 +617,19 @@ function installContextMenu() {
     showMenu(target, event.originalEvent?.clientX ?? rendered.x, event.originalEvent?.clientY ?? rendered.y);
   };
   cy?.on('cxttap', onContext);
+  const onNativeContext = event => {
+    event.preventDefault();
+    event.stopPropagation();
+    showMenu(targetAtClientPoint(event.clientX, event.clientY), event.clientX, event.clientY);
+  };
+  container.addEventListener('contextmenu', onNativeContext);
   const onDocumentClick = event => { if (!contextMenu?.contains(event.target)) closeContextMenu(); };
   document.addEventListener('click', onDocumentClick);
   const onDocumentContext = event => { if (!container.contains(event.target)) closeContextMenu(); };
   document.addEventListener('contextmenu', onDocumentContext);
   contextMenuCleanup = () => {
     cy?.off('cxttap', onContext);
+    container.removeEventListener('contextmenu', onNativeContext);
     document.removeEventListener('click', onDocumentClick);
     document.removeEventListener('contextmenu', onDocumentContext);
     closeContextMenu();
@@ -605,23 +637,45 @@ function installContextMenu() {
 }
 
 function installGraphInteractions() {
-  if (!cy) return;
+  if (!cy || graphInteractionsCleanup) return;
+  const setNodeAsRoot = node => {
+    const holon = currentModel.holons.find(item => String(item.id) === String(node?.data?.('holonId')));
+    if (!holon) return false;
+    currentRootId = String(holon.id);
+    const control = document.getElementById('graphRoot');
+    if (control) control.value = holon.name || '';
+    render();
+    const renderedNode = cy?.nodes?.(`[id = "${currentRootId.replaceAll('"', '\\"')}"]`);
+    renderedNode?.select();
+    emitSelection(holon);
+    updateNavigationButton();
+    return true;
+  };
   cy.on('tap', 'node', event => {
     const holon = currentModel.holons.find(item => String(item.id) === String(event.target.data('holonId')));
     emitSelection(holon || null);
   });
   cy.on('dbltap', 'node', event => {
-    const holon = currentModel.holons.find(item => String(item.id) === String(event.target.data('holonId')));
-    if (!holon) return;
-    currentRootId = String(holon.id);
-    const control = document.getElementById('graphRoot');
-    if (control) control.value = holon.name || '';
-    render();
-    const node = cy?.nodes?.(`[id = "${currentRootId.replaceAll('"', '\\"')}"]`);
-    node?.select();
-    emitSelection(holon);
-    updateNavigationButton();
+    setNodeAsRoot(event.target);
   });
+  const container = document.getElementById('holonGraph');
+  const onNativeDoubleClick = event => {
+    const rect = container.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    const node = cy.nodes(':visible').filter(item => {
+      const box = item.renderedBoundingBox({ includeLabels: true, includeOverlays: true });
+      return x >= box.x1 && x <= box.x2 && y >= box.y1 && y <= box.y2;
+    }).last();
+    if (!node?.length || !setNodeAsRoot(node)) return;
+    event.preventDefault();
+    event.stopPropagation();
+  };
+  container?.addEventListener('dblclick', onNativeDoubleClick);
+  graphInteractionsCleanup = () => {
+    container?.removeEventListener('dblclick', onNativeDoubleClick);
+    graphInteractionsCleanup = null;
+  };
   cy.on('tap', 'edge', event => {
     const relationship = event.target.data('relationship');
     if (relationship) window.dispatchEvent(new CustomEvent('relationship:selected', { detail: relationship }));
@@ -691,6 +745,7 @@ export function destroyHolonGraph() {
 
     contextMenuCleanup?.();
     contextMenuCleanup = null;
+    graphInteractionsCleanup?.();
     cancelAnimationFrame(viewportResizeFrame);
     viewportResizeObserver?.disconnect();
     viewportResizeObserver = null;
