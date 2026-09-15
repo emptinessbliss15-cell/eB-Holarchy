@@ -23,6 +23,9 @@ let viewportResizeFrame = 0;
 let singleClickTimer = 0;
 let hiddenNodeIds = new Set();
 let hiddenRelationshipIds = new Set();
+let graphDisplayMode = 'edges';
+let nestingRelationshipTypeIds = new Set();
+let nestingReport = { nestedCount: 0, conflicts: [], cycles: [] };
 
 const GRAPH_DEPTH_STORAGE_KEY = 'eB-Holarchy.graphDepth';
 const GRAPH_HIDDEN_STORAGE_KEY = 'eB-Governance.graphHidden';
@@ -153,6 +156,7 @@ function installStyles() {
     .holon-hover-preview[hidden] { display: none; }
     .holon-hover-title { font-size: 13px; font-weight: 700; margin-bottom: 2px; overflow-wrap: anywhere; }
     .holon-hover-type { font-size: 11px; opacity: .68; margin-bottom: 6px; }
+    .holon-hover-nesting { margin-bottom: 6px; font-size: 11px; color: #2563eb; }
     .holon-hover-content { white-space: pre-wrap; overflow-wrap: anywhere; }
     @media (max-width: 760px) { .graph-context { min-width: 0; flex: 1; } .graph-context .hcg-autocomplete { min-width: 0; } }
   `;
@@ -278,7 +282,8 @@ function showHoverPreview(holon, event) {
   }
   const type = holon.holon_type || holon.holon_type_name || 'Holon';
   const content = hoverContentFor(holon);
-  hoverPreview.innerHTML = `<div class="holon-hover-title">${escapeHtml(holon.name || '(unnamed)')}</div><div class="holon-hover-type">${escapeHtml(type)}</div>${content ? `<div class="holon-hover-content">${escapeHtml(content)}</div>` : ''}`;
+  const nestingReason = event.target?.data?.('nestingReason') || '';
+  hoverPreview.innerHTML = `<div class="holon-hover-title">${escapeHtml(holon.name || '(unnamed)')}</div><div class="holon-hover-type">${escapeHtml(type)}</div>${nestingReason ? `<div class="holon-hover-nesting">${escapeHtml(nestingReason)}</div>` : ''}${content ? `<div class="holon-hover-content">${escapeHtml(content)}</div>` : ''}`;
   hoverPreview.hidden = false;
   const x = event.originalEvent?.clientX ?? event.renderedPosition?.x ?? 0;
   const y = event.originalEvent?.clientY ?? event.renderedPosition?.y ?? 0;
@@ -499,9 +504,87 @@ function normalizeStatus(status) {
   return 'current';
 }
 
+function nestingAssignments(holons, relationships, relationshipTypes) {
+  const nodeIds = new Set(holons.map(holon => String(holon.id)));
+  const candidates = new Map();
+  const relationshipByChild = new Map();
+
+  for (const relationship of relationships) {
+    if (!nestingRelationshipTypeIds.has(String(relationship.relationship_type_id))) continue;
+    const childId = String(relationship.source_holon_id);
+    const parentId = String(relationship.target_holon_id);
+    if (!nodeIds.has(childId) || !nodeIds.has(parentId) || childId === parentId) continue;
+    if (!candidates.has(childId)) candidates.set(childId, new Set());
+    candidates.get(childId).add(parentId);
+    if (!relationshipByChild.has(childId)) relationshipByChild.set(childId, []);
+    relationshipByChild.get(childId).push(relationship);
+  }
+
+  const parents = new Map();
+  const conflicts = [];
+  for (const [childId, parentIds] of candidates) {
+    if (parentIds.size === 1) parents.set(childId, [...parentIds][0]);
+    else conflicts.push({ childId, parentIds: [...parentIds] });
+  }
+
+  const cycleIds = new Set();
+  for (const childId of parents.keys()) {
+    const path = [];
+    const positions = new Map();
+    let currentId = childId;
+    while (parents.has(currentId)) {
+      if (positions.has(currentId)) {
+        path.slice(positions.get(currentId)).forEach(id => cycleIds.add(id));
+        break;
+      }
+      positions.set(currentId, path.length);
+      path.push(currentId);
+      currentId = parents.get(currentId);
+    }
+  }
+  cycleIds.forEach(id => parents.delete(id));
+
+  const nestedRelationshipIds = new Set();
+  const reasons = new Map();
+  const names = new Map(holons.map(holon => [String(holon.id), holon.name || '(unnamed)']));
+  for (const [childId, parentId] of parents) {
+    for (const relationship of relationshipByChild.get(childId) || []) {
+      if (String(relationship.target_holon_id) === parentId) {
+        nestedRelationshipIds.add(String(relationship.id));
+        if (!reasons.has(childId)) reasons.set(childId, `Nested in ${names.get(parentId)} because: ${relationshipLabel(relationship, relationshipTypes)}`);
+      }
+    }
+  }
+
+  return {
+    parents,
+    reasons,
+    nestedRelationshipIds,
+    report: {
+      nestedCount: parents.size,
+      conflicts,
+      cycles: [...cycleIds],
+    },
+  };
+}
+
 function buildElements(holons, relationships, relationshipTypes) {
-  const nodes = holons.map(holon => ({ data: { id: String(holon.id), label: holon.name || '(unnamed)', type: holon.holon_type || 'Holon', holonId: holon.id, status: normalizeStatus(holon.status) } }));
-  const edges = relationships.map(relationship => ({ data: { id: String(relationship.id), source: String(relationship.source_holon_id), target: String(relationship.target_holon_id), label: relationshipLabel(relationship, relationshipTypes), relationship } }));
+  const nesting = graphDisplayMode === 'nested'
+    ? nestingAssignments(holons, relationships, relationshipTypes)
+    : { parents: new Map(), reasons: new Map(), nestedRelationshipIds: new Set(), report: { nestedCount: 0, conflicts: [], cycles: [] } };
+  nestingReport = nesting.report;
+  const nodes = holons.map(holon => ({ data: {
+    id: String(holon.id),
+    label: holon.name || '(unnamed)',
+    type: holon.holon_type || 'Holon',
+    holonId: holon.id,
+    status: normalizeStatus(holon.status),
+    nestingReason: nesting.reasons.get(String(holon.id)) || '',
+    ...(nesting.parents.has(String(holon.id)) ? { parent: nesting.parents.get(String(holon.id)) } : {}),
+  } }));
+  const edges = relationships
+    .filter(relationship => !nesting.nestedRelationshipIds.has(String(relationship.id)))
+    .map(relationship => ({ data: { id: String(relationship.id), source: String(relationship.source_holon_id), target: String(relationship.target_holon_id), label: relationshipLabel(relationship, relationshipTypes), relationship } }));
   return [...nodes, ...edges];
 }
 
@@ -632,7 +715,13 @@ function installContextMenu() {
       const box = node.renderedBoundingBox({ includeLabels: true, includeOverlays: true });
       return x >= box.x1 && x <= box.x2 && y >= box.y1 && y <= box.y2;
     });
-    if (nodes.length) return nodes[nodes.length - 1];
+    if (nodes.length) {
+      return nodes.reduce((smallest, node) => {
+        const box = node.renderedBoundingBox({ includeLabels: true, includeOverlays: true });
+        const smallestBox = smallest.renderedBoundingBox({ includeLabels: true, includeOverlays: true });
+        return box.w * box.h < smallestBox.w * smallestBox.h ? node : smallest;
+      });
+    }
     return null;
   }
   const onContext = event => {
@@ -694,10 +783,15 @@ function installGraphInteractions() {
     const rect = container.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
-    const node = cy.nodes(':visible').filter(item => {
+    const nodes = cy.nodes(':visible').filter(item => {
       const box = item.renderedBoundingBox({ includeLabels: true, includeOverlays: true });
       return x >= box.x1 && x <= box.x2 && y >= box.y1 && y <= box.y2;
-    }).last();
+    });
+    const node = nodes.length ? nodes.reduce((smallest, item) => {
+      const box = item.renderedBoundingBox({ includeLabels: true, includeOverlays: true });
+      const smallestBox = smallest.renderedBoundingBox({ includeLabels: true, includeOverlays: true });
+      return box.w * box.h < smallestBox.w * smallestBox.h ? item : smallest;
+    }) : null;
     if (!node?.length || !setNodeAsRoot(node)) return;
     event.preventDefault();
     event.stopPropagation();
@@ -727,6 +821,7 @@ function render() {
 
     cy.elements().remove();
     cy.add(buildElements(model.holons, model.relationships, model.relationshipTypes));
+    window.dispatchEvent(new CustomEvent('holonGraph:nestingReport', { detail: nestingReport }));
 
     cy.one('layoutstop', () => {
         if (generation === renderGeneration) {
@@ -752,6 +847,7 @@ export function createHolonGraph({ element, holons = [], relationships = [], rel
   if (!cy) {
     cy = window.cytoscape({ container: element, elements: [], style: [
       { selector: 'node', style: { 'label': 'data(label)', 'text-valign': 'center', 'text-halign': 'center', 'background-color': '#5b8def', 'color': '#fff', 'font-size': 11, 'width': 42, 'height': 42, 'text-wrap': 'wrap', 'text-max-width': 70 } },
+      { selector: '$node > node', style: { 'background-opacity': 0.18, 'border-width': 2, 'border-color': '#5b8def', 'padding': 24, 'text-valign': 'top', 'text-halign': 'center' } },
       { selector: 'edge', style: { 'curve-style': 'bezier', 'target-arrow-shape': 'triangle', 'line-color': '#999', 'target-arrow-color': '#999', 'width': 2, 'label': 'data(label)', 'font-size': 9, 'text-background-color': '#fff', 'text-background-opacity': 0.7, 'text-background-padding': 2 } },
       { selector: ':selected', style: { 'overlay-color': '#f59e0b', 'overlay-opacity': 0.18, 'overlay-padding': 5 } },
     ] });
@@ -761,6 +857,7 @@ export function createHolonGraph({ element, holons = [], relationships = [], rel
     installContextMenu();
   }
   currentModel = { holons, relationships, relationshipTypes };
+  window.dispatchEvent(new CustomEvent('holonGraph:modelChanged', { detail: currentModel }));
   selectionHandler = onSelect || selectionHandler;
   render();
   return cy;
@@ -768,6 +865,7 @@ export function createHolonGraph({ element, holons = [], relationships = [], rel
 
 export function updateHolonGraph({ holons = [], relationships = [], relationshipTypes = [], rootId } = {}) {
   currentModel = { holons, relationships, relationshipTypes };
+  window.dispatchEvent(new CustomEvent('holonGraph:modelChanged', { detail: currentModel }));
   if (rootId !== undefined) currentRootId = rootId ? String(rootId) : null;
   render();
 }
@@ -804,6 +902,24 @@ export function setGraphDepth(depth) {
 export function setShowProvenance(value) {
   showProvenance = Boolean(value);
   render();
+}
+
+export function setGraphDisplay({ mode = 'edges', relationshipTypeIds = [] } = {}) {
+  graphDisplayMode = mode === 'nested' ? 'nested' : 'edges';
+  nestingRelationshipTypeIds = new Set(relationshipTypeIds.map(String));
+  render();
+}
+
+export function getGraphDisplay() {
+  return {
+    mode: graphDisplayMode,
+    relationshipTypeIds: [...nestingRelationshipTypeIds],
+    report: nestingReport,
+  };
+}
+
+export function getHolonGraphModel() {
+  return currentModel;
 }
 
 export function getHolonGraph() { return cy; }
