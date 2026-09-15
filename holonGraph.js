@@ -1,4 +1,5 @@
 import { toggledOn } from './eBToggles.js';
+import { eBPreferences } from './eBPreferences.js';
 
 // Holon Graph — visual model of Holons and their relationships.
 // Cytoscape is kept as the rendering primitive; the app owns the Holon model.
@@ -27,6 +28,7 @@ let graphDisplayMode = 'edges';
 let nestingRelationshipTypeIds = new Set();
 let nestingContainerShape = 'circles';
 let nestingReport = { nestedCount: 0, conflicts: [], cycles: [] };
+let hiddenPreferencesInstalled = false;
 
 const GRAPH_DEPTH_STORAGE_KEY = 'eB-Holarchy.graphDepth';
 const GRAPH_HIDDEN_STORAGE_KEY = 'eB-Governance.graphHidden';
@@ -42,13 +44,57 @@ function restorePersistedHidden() {
   }
 }
 
-function persistHidden() {
+function hiddenState() {
+  return {
+    nodes: [...hiddenNodeIds],
+    relationships: [...hiddenRelationshipIds],
+    configured: true,
+  };
+}
+
+function persistHiddenLocally() {
   try {
-    localStorage.setItem(GRAPH_HIDDEN_STORAGE_KEY, JSON.stringify({
-      nodes: [...hiddenNodeIds],
-      relationships: [...hiddenRelationshipIds],
-    }));
+    localStorage.setItem(GRAPH_HIDDEN_STORAGE_KEY, JSON.stringify(hiddenState()));
   } catch (_) {}
+}
+
+function persistHidden() {
+  persistHiddenLocally();
+  eBPreferences.schedule('graph.hidden', hiddenState(), { errorMessage: 'Unable to save hidden graph items' });
+}
+
+async function loadProfileHidden() {
+  const remote = await eBPreferences.get('graph.hidden');
+  if (remote && typeof remote === 'object' && remote.configured === true) {
+    hiddenNodeIds = new Set((remote.nodes || []).map(String));
+    hiddenRelationshipIds = new Set((remote.relationships || []).map(String));
+    pruneHiddenToModel();
+    persistHiddenLocally();
+  } else {
+    await eBPreferences.set('graph.hidden', hiddenState());
+  }
+  render();
+}
+
+function installHiddenPreferences() {
+  if (hiddenPreferencesInstalled) return;
+  hiddenPreferencesInstalled = true;
+  window.addEventListener('preferences:profileChanged', () => {
+    void loadProfileHidden().catch(error => window.ebStatus?.error?.(error?.message || 'Unable to load hidden graph items'));
+  });
+  void loadProfileHidden().catch(error => window.ebStatus?.error?.(error?.message || 'Unable to load hidden graph items'));
+}
+
+function pruneHiddenToModel() {
+  if (!currentModel.holons.length && !currentModel.relationships.length) return;
+  const nodeIds = new Set(currentModel.holons.map(holon => String(holon.id)));
+  const relationshipIds = new Set(currentModel.relationships.map(relationship => String(relationship.id)));
+  const nextNodes = new Set([...hiddenNodeIds].filter(id => nodeIds.has(id)));
+  const nextRelationships = new Set([...hiddenRelationshipIds].filter(id => relationshipIds.has(id)));
+  if (nextNodes.size === hiddenNodeIds.size && nextRelationships.size === hiddenRelationshipIds.size) return;
+  hiddenNodeIds = nextNodes;
+  hiddenRelationshipIds = nextRelationships;
+  persistHidden();
 }
 
 restorePersistedHidden();
@@ -852,6 +898,7 @@ export function createHolonGraph({ element, holons = [], relationships = [], rel
   installStatusLegend();
   installFeatureToggleListener();
   installViewportSizing();
+  installHiddenPreferences();
   if (!element) return null;
   if (!cy) {
     cy = window.cytoscape({ container: element, elements: [], style: [
@@ -869,6 +916,7 @@ export function createHolonGraph({ element, holons = [], relationships = [], rel
     installContextMenu();
   }
   currentModel = { holons, relationships, relationshipTypes };
+  pruneHiddenToModel();
   window.dispatchEvent(new CustomEvent('holonGraph:modelChanged', { detail: currentModel }));
   selectionHandler = onSelect || selectionHandler;
   render();
@@ -877,6 +925,7 @@ export function createHolonGraph({ element, holons = [], relationships = [], rel
 
 export function updateHolonGraph({ holons = [], relationships = [], relationshipTypes = [], rootId } = {}) {
   currentModel = { holons, relationships, relationshipTypes };
+  pruneHiddenToModel();
   window.dispatchEvent(new CustomEvent('holonGraph:modelChanged', { detail: currentModel }));
   if (rootId !== undefined) currentRootId = rootId ? String(rootId) : null;
   render();
