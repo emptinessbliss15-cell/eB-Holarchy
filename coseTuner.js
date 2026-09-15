@@ -1,4 +1,5 @@
 import { getHolonGraph } from './holonGraph.js';
+import { eBliss } from './eBSDK.js';
 
 const STORAGE_KEY = 'eB-Holarchy.coseOptions';
 const PRESETS_STORAGE_KEY = 'eB-Holarchy.cosePresets';
@@ -22,6 +23,7 @@ function loadValues() {
 let values = loadValues();
 let presets = loadPresets();
 let panel = null;
+let profileSaveTimer = 0;
 
 function loadPresets() {
   try {
@@ -36,6 +38,42 @@ function savePresets() {
 
 function saveValues() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(values)); } catch {}
+}
+
+function sameValues(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function localStateIsCustomized() {
+  return Object.keys(presets).length > 0 || !sameValues(values, defaults);
+}
+
+async function saveProfileState() {
+  await eBliss.profile.setPreference('graph.cose', { values, presets });
+}
+
+function scheduleProfileSave() {
+  clearTimeout(profileSaveTimer);
+  profileSaveTimer = window.setTimeout(() => {
+    profileSaveTimer = 0;
+    void saveProfileState().catch(error => window.ebStatus?.error?.(error?.message || 'Unable to save COSE settings'));
+  }, 250);
+}
+
+async function loadProfileState() {
+  const preferences = await eBliss.profile.preferences();
+  if (preferences === null) return;
+  const remote = preferences['graph.cose'];
+  if (!remote || typeof remote !== 'object') {
+    if (localStateIsCustomized()) await saveProfileState();
+    return;
+  }
+  const localPresets = presets;
+  values = { ...defaults, ...(remote.values || {}) };
+  presets = { ...localPresets, ...(remote.presets || {}) };
+  saveValues();
+  savePresets();
+  if (!sameValues(presets, remote.presets || {})) await saveProfileState();
 }
 
 function runLayout() {
@@ -71,6 +109,7 @@ function field(label, key, min, max, step = 1, help = '') {
     if (!Number.isFinite(next)) return;
     values[key] = next;
     saveValues();
+    scheduleProfileSave();
   });
   row.append(caption, input);
   return row;
@@ -100,10 +139,12 @@ function installStyles() {
   document.head.appendChild(style);
 }
 
-export function initCoseTuner() {
+export async function initCoseTuner() {
   installStyles();
   const graph = document.getElementById('holonGraph');
   if (!graph?.parentElement || document.getElementById('coseTunerButton')) return;
+  try { await loadProfileState(); }
+  catch (error) { window.ebStatus?.error?.(error?.message || 'Unable to load COSE settings'); }
 
   const button = document.createElement('button');
   button.id = 'coseTunerButton';
@@ -136,6 +177,7 @@ export function initCoseTuner() {
     if (!preset) return;
     values = { ...defaults, ...preset };
     saveValues();
+    scheduleProfileSave();
     syncFields();
     runLayout();
   });
@@ -148,6 +190,7 @@ export function initCoseTuner() {
     if (!name) return;
     presets[name] = { ...values };
     savePresets();
+    scheduleProfileSave();
     renderPresets(name);
   });
   renderPresets();
@@ -177,6 +220,7 @@ export function initCoseTuner() {
   reset.addEventListener('click', () => {
     values = { ...defaults };
     saveValues();
+    scheduleProfileSave();
     presetSelect.value = '';
     syncFields();
     runLayout();

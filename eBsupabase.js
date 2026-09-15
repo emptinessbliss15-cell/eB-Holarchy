@@ -355,6 +355,19 @@ export function createEBSupabase()
       async get(userId) { return result('Profile', await supabase.from('profiles').select('*').eq('id', userId).maybeSingle()); },
       async list() { return result('Participant directory', await supabase.from('participant_directory').select('id,display_name,person_holon_id').order('display_name')) || []; },
       upsert: upsertProfile,
+      async preferences() {
+        const userId = await currentUserId();
+        if (!userId) return null;
+        const profile = result('Profile preferences', await supabase.from('profiles').select('preferences').eq('id', userId).maybeSingle());
+        return profile?.preferences || {};
+      },
+      async setPreference(name, value) {
+        const userId = await currentUserId();
+        if (!userId) return null;
+        const profile = result('Profile preferences', await supabase.from('profiles').select('preferences').eq('id', userId).maybeSingle());
+        const preferences = { ...(profile?.preferences || {}), [String(name)]: value };
+        return result('Profile preference', await supabase.from('profiles').upsert({ id: userId, preferences }).select('preferences').single());
+      },
     },
     identity: {
       async authenticated() { const user = await currentAuthUser(); return { id: user.id, email: user.email || '' }; },
