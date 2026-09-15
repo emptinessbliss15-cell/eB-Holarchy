@@ -81,7 +81,7 @@ function installStyles() {
   const style = document.createElement('style');
   style.id = 'eb-cose-tuner-style';
   style.textContent = `
-    .eb-cose-tuner-button { position:absolute; top:10px; right:10px; z-index:8; padding:5px 8px; border:1px solid var(--eb-border-strong,#777); border-radius:6px; background:var(--eb-input-bg,#fff); color:var(--eb-text,#222); cursor:pointer; font-size:12px; }
+    .eb-cose-tuner-button { position:static; flex:0 0 auto; min-height:30px; padding:5px 8px; border:1px solid var(--eb-border-strong,#777); border-radius:6px; background:var(--eb-input-bg,#fff); color:var(--eb-text,#222); cursor:pointer; font-size:12px; white-space:nowrap; }
     .eb-cose-tuner { position:absolute; top:42px; right:10px; z-index:9; width:250px; padding:10px; border:1px solid var(--eb-border-strong,#777); border-radius:8px; background:var(--eb-input-bg,#fff); color:var(--eb-text,#222); box-shadow:0 8px 24px rgba(0,0,0,.25); }
     .eb-cose-tuner[hidden] { display:none; }
     .eb-cose-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; font-weight:700; }
@@ -185,7 +185,10 @@ export function initCoseTuner() {
   panel.appendChild(actions);
 
   button.addEventListener('click', () => { panel.hidden = !panel.hidden; });
-  graph.parentElement.append(button, panel);
+  const heading = graph.parentElement.querySelector('.holarchy-heading');
+  if (heading) heading.appendChild(button);
+  else graph.parentElement.appendChild(button);
+  graph.parentElement.appendChild(panel);
 }
 
 export function getCoseOptions() { return { ...values }; }
