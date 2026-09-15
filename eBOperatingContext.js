@@ -69,6 +69,7 @@ function renderContextView() {
       onCreate: (type, parent) => window.dispatchEvent(new CustomEvent('holon:contextcreate', { detail: { type, parent } })),
       onCreateRelationship: parent => window.dispatchEvent(new CustomEvent('relationship:contextcreate', { detail: { parent } })),
       onEdit: holon => window.dispatchEvent(new CustomEvent('holon:contextedit', { detail: { holon } })),
+      onDelete: holon => window.dispatchEvent(new CustomEvent('holon:contextdelete', { detail: { holon } })),
     });
     return;
   }

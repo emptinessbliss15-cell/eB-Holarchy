@@ -32,9 +32,10 @@ function makeButton(label, className, onClick) {
   return button;
 }
 
-export function renderCircleView({ container, context, holons = [], relationships = [], relationshipTypes = [], onOpen, onOperate, onCreate, onCreateRelationship, onEdit } = {}) {
+export function renderCircleView({ container, context, holons = [], relationships = [], relationshipTypes = [], onOpen, onOperate, onCreate, onCreateRelationship, onEdit, onDelete } = {}) {
   if (!container) return;
   container._ebCircleAddButton?.destroy?.();
+  container._ebCircleContextCleanup?.();
   container.replaceChildren();
   const byId = new Map(holons.map(holon => [String(holon.id), holon]));
   const active = context && byId.get(String(context.id));
@@ -104,6 +105,48 @@ export function renderCircleView({ container, context, holons = [], relationship
   const detail = document.createElement('aside'); detail.className = 'eb-circle-detail'; detail.setAttribute('aria-live', 'polite');
   layout.append(canvas, detail); container.appendChild(layout);
 
+  let contextMenu = null;
+  const contextController = new AbortController();
+  function closeContextMenu() { contextMenu?.remove(); contextMenu = null; }
+  function selectCircle(node, holon) {
+    canvas.querySelectorAll('.is-selected').forEach(item => item.classList.remove('is-selected'));
+    node.classList.add('is-selected');
+    renderDetail(holon);
+  }
+  function showCircleContextMenu(holon, node, x, y) {
+    closeContextMenu();
+    selectCircle(node, holon);
+    const menu = document.createElement('div');
+    menu.className = 'eb-context-menu eb-circle-context-menu';
+    menu.setAttribute('role', 'menu');
+    menu.setAttribute('aria-label', `Actions for ${holon.name || 'circle'}`);
+    const add = (label, action, danger = false) => {
+      const button = makeButton(label, danger ? 'danger' : '', event => { closeContextMenu(); action(event); });
+      button.setAttribute('role', 'menuitem');
+      menu.appendChild(button);
+    };
+    const separator = document.createElement('div'); separator.className = 'context-separator'; separator.setAttribute('role', 'separator');
+    add('Open in Graph', () => onOpen?.(holon));
+    if (String(holon.id) !== String(active.id)) add('Operate within', () => onOperate?.(holon));
+    add('Add Subcircle', () => onCreate?.('Circle', holon));
+    add('Add Role', () => onCreate?.('Role', holon));
+    add('Add Tension', () => onCreate?.('Tension', holon));
+    add('Add Process', () => onCreate?.('Process', holon));
+    add('Add Relationship', () => onCreateRelationship?.(holon));
+    menu.appendChild(separator);
+    add('Edit Properties', () => onEdit?.(holon));
+    add('Delete Circle', () => onDelete?.(holon), true);
+    document.body.appendChild(menu);
+    const rect = menu.getBoundingClientRect();
+    menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - rect.width - 8))}px`;
+    menu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - rect.height - 8))}px`;
+    contextMenu = menu;
+    menu.querySelector('button')?.focus();
+  }
+  document.addEventListener('pointerdown', event => { if (!contextMenu?.contains(event.target)) closeContextMenu(); }, { signal: contextController.signal });
+  document.addEventListener('keydown', event => { if (event.key === 'Escape') closeContextMenu(); }, { signal: contextController.signal });
+  container._ebCircleContextCleanup = () => { contextController.abort(); closeContextMenu(); };
+
   function renderDetail(holon) {
     detail.replaceChildren();
     const name = document.createElement('h4'); name.textContent = holon.name || '(unnamed)';
@@ -144,8 +187,12 @@ export function renderCircleView({ container, context, holons = [], relationship
     const roles = children.filter(isRole).sort((a, b) => text(a.name).localeCompare(text(b.name)));
     const label = document.createElement('button'); label.type = 'button'; label.className = 'eb-org-circle-label'; label.textContent = holon.name || '(unnamed)';
     label.title = `${typeOf(holon)} · ${circles.length} subcircles · ${roles.length} roles`;
-    label.addEventListener('click', event => { event.stopPropagation(); canvas.querySelectorAll('.is-selected').forEach(item => item.classList.remove('is-selected')); node.classList.add('is-selected'); renderDetail(holon); });
+    label.addEventListener('click', event => { event.stopPropagation(); selectCircle(node, holon); });
     label.addEventListener('dblclick', event => { event.stopPropagation(); onOperate?.(holon); });
+    node.addEventListener('contextmenu', event => {
+      event.preventDefault(); event.stopPropagation();
+      showCircleContextMenu(holon, node, event.clientX, event.clientY);
+    });
     const stats = document.createElement('div'); stats.className = 'eb-org-circle-stats'; stats.textContent = `${circles.length} circles · ${roles.length} roles`;
     const contents = document.createElement('div'); contents.className = 'eb-org-circle-contents';
     for (const role of roles) {
