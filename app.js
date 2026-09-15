@@ -1,3 +1,4 @@
+import { createRelationshipProperties, appendHolonRelationships } from './relationshipProperties.js';
 import { eBConfirm } from './eBConfirm.js';
 // eBliss graph experiment bootstrap and UI operations.
 // Main workspace: Holarchy graph + contextual property editor.
@@ -137,6 +138,8 @@ function renderHolonInspector(holon)
   propertyGrid?.destroy?.();
   propertyGrid = null;
 
+  selectedHolon = holon;
+  selectedRelationship = null;
   if (!holon)
   {
     elements.inspectorContent.replaceChildren();
@@ -146,9 +149,6 @@ function renderHolonInspector(holon)
     elements.inspectorContent.appendChild(empty);
     return;
   }
-
-  selectedHolon = holon;
-  selectedRelationship = null;
 
   const dynamicFields = dynamicFieldDefinitions(holon.holon_type);
   const decoded = decodeDynamicContent(holon.Content);
@@ -199,22 +199,16 @@ function renderHolonInspector(holon)
   });
 
   markDynamicFieldBoundary(propertyGrid.element, schemaRows.length);
+  appendHolonRelationships(elements.inspectorContent, holon, { holons, relationships, relationshipTypes }, renderRelationshipInspector);
 }
 
-function relationshipEndpointName(id, fallback = '—') { if (!id) return fallback; return holons.find(item => String(item.id) === String(id))?.name || '(unnamed Holon)'; }
-function relationshipTypeName(id, fallback = '—') { if (!id) return fallback; return relationshipTypes.find(item => String(item.id) === String(id))?.name || '(unnamed relationship)'; }
-function relationshipPropertyValue(key, value) { if (key === 'source_holon_id' || key === 'target_holon_id') return relationshipEndpointName(value); if (key === 'relationship_type_id') return relationshipTypeName(value); return formatPropertyValue(value); }
-function relationshipComboOptions(kind, selected = '') { const options = kind === 'relationship' ? relationshipTypes.map(type => ({ value: type.id, label: type.name || '(unnamed relationship)' })) : holons.filter(holon => String(holon.holon_type || '').toLowerCase() !== 'provenance').map(holon => ({ value: holon.id, label: holon.name || '(unnamed Holon)' })); if (selected && !options.some(option => String(option.value) === String(selected))) options.unshift({ value: selected, label: relationshipPropertyValue(kind === 'relationship' ? 'relationship_type_id' : `${kind}_holon_id`, selected) }); return options; }
-async function saveRelationshipProperty(relationship, key, value) { let nextValue = value; if (key === 'source_holon_id' || key === 'target_holon_id' || key === 'relationship_type_id') { nextValue = String(value ?? '').trim(); if (!nextValue) { setStatus(`${labelForKey(key)} is required`, 'warn'); renderRelationshipInspector(relationship); return; } const exists = key === 'relationship_type_id' ? relationshipTypes.some(type => String(type.id) === nextValue) : holons.some(holon => String(holon.id) === nextValue); if (!exists) { setStatus(`Unknown ${labelForKey(key)}`, 'warn'); renderRelationshipInspector(relationship); return; } } else if (key === 'position') { nextValue = Number(value); if (!Number.isInteger(nextValue)) { setStatus('Position must be a whole number', 'warn'); renderRelationshipInspector(relationship); return; } } if (String(nextValue) === String(relationship[key] ?? '')) return; setStatus(`Updating relationship ${labelForKey(key)}…`); try { await eBliss.relationships.update(relationship.id, { [key]: nextValue }); await loadModel(); const updated = relationships.find(item => String(item.id) === String(relationship.id)) || { ...relationship, [key]: nextValue }; selectedRelationship = updated; renderRelationshipInspector(updated); status.updated(labelForKey(key), relationshipPropertyValue(key, nextValue)); } catch (error) { setStatus(error.message || `Unable to update relationship ${labelForKey(key)}`, 'error'); renderRelationshipInspector(relationship); } }
-
-function renderRelationshipInspector(relationship)
-{
+function renderRelationshipInspector(relationship) {
   if (!elements.inspectorContent) return;
   propertyGrid?.destroy?.();
   propertyGrid = null;
-
-  if (!relationship)
-  {
+  selectedRelationship = relationship;
+  selectedHolon = null;
+  if (!relationship) {
     elements.inspectorContent.replaceChildren();
     const empty = document.createElement('div');
     empty.className = 'muted';
@@ -222,40 +216,10 @@ function renderRelationshipInspector(relationship)
     elements.inspectorContent.appendChild(empty);
     return;
   }
-
-  selectedRelationship = relationship;
-  selectedHolon = null;
-
-  const sourceName = relationshipEndpointName(relationship.source_holon_id, '(source)');
-  const targetName = relationshipEndpointName(relationship.target_holon_id, '(target)');
-  const relationshipName = relationshipTypeName(relationship.relationship_type_id, '(relationship)');
-  const rows = [
-    { key: 'id', property: 'Relationship ID', value: formatPropertyValue(relationship.id) },
-    { key: 'source_holon_id', property: 'Source Holon', value: sourceName },
-    { key: 'relationship_type_id', property: 'Relationship Type', value: relationshipName },
-    { key: 'target_holon_id', property: 'Target Holon', value: targetName },
-    { key: 'position', property: 'Position', value: formatPropertyValue(relationship.position) },
-  ];
-
-  propertyGrid = createEBProps(elements.inspectorContent, {
-    title: `${sourceName} — ${relationshipName} → ${targetName}`,
-    rows,
-    ariaLabel: `${sourceName} to ${targetName} relationship properties`,
-    pageSize: rows.length,
-    editor: row =>
-    {
-      if (row.key === 'id') return null;
-      if (row.key === 'source_holon_id') return { type: 'combobox', options: relationshipComboOptions('source', relationship.source_holon_id), value: relationship.source_holon_id, displayValue: sourceName, minChars: 0, allowCustom: false, clearable: false };
-      if (row.key === 'relationship_type_id') return { type: 'combobox', options: relationshipComboOptions('relationship', relationship.relationship_type_id), value: relationship.relationship_type_id, displayValue: relationshipName, minChars: 0, allowCustom: false, clearable: false };
-      if (row.key === 'target_holon_id') return { type: 'combobox', options: relationshipComboOptions('target', relationship.target_holon_id), value: relationship.target_holon_id, displayValue: targetName, minChars: 0, allowCustom: false, clearable: false };
-      if (row.key === 'position') return { type: 'input', inputType: 'number', step: 1 };
-      return null;
-    },
-    onChange: (row, newValue) =>
-    {
-      if (row.key === 'id') return;
-      void saveRelationshipProperty(relationship, row.key, newValue);
-    },
+  propertyGrid = createRelationshipProperties(elements.inspectorContent, relationship, {
+    holons, relationships, relationshipTypes, eBliss,
+    loadModel: async () => { await loadModel(); return { relationships }; },
+    renderRelationshipInspector, setStatus, status, labelForKey, formatPropertyValue,
   });
 }
 

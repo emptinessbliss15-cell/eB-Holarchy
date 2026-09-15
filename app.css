@@ -205,3 +205,9 @@ p.eb-document-content-block { margin: .6rem 0; line-height: 1.55; }
 .eb-confirm-actions button:last-child { font-weight: 600; }
 .eb-confirm-actions button.danger { border-color: #b91c1c; color: #b91c1c; }
 .eb-confirm-actions button:focus-visible { outline: 2px solid var(--eb-accent, #5b8def); outline-offset: 2px; }
+
+.holon-relationships { margin-top: 1rem; border-top: 1px solid currentColor; }
+.holon-relationships h3 { font-size: 0.9rem; }
+.holon-relationships ul { list-style: none; padding: 0; }
+.holon-relationships li { margin: 0.4rem 0; }
+.holon-relationships button { width: 100%; text-align: left; white-space: normal; overflow-wrap: anywhere; }
