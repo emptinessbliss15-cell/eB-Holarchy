@@ -20,6 +20,7 @@ let graphInteractionsCleanup = null;
 let hoverPreview = null;
 let viewportResizeObserver = null;
 let viewportResizeFrame = 0;
+let singleClickTimer = 0;
 let hiddenNodeIds = new Set();
 let hiddenRelationshipIds = new Set();
 
@@ -514,11 +515,11 @@ function installNavigation() {
     const button = document.createElement('button');
     button.id = 'graphUp';
     button.type = 'button';
-    button.textContent = '↑ Up';
+    button.textContent = '↑';
     button.title = 'Back up one Holon level (Backspace)';
     button.setAttribute('aria-label', 'Back up one Holon level');
     button.addEventListener('click', navigateUp);
-    filter.appendChild(button);
+    filter.prepend(button);
   }
   document.addEventListener('keydown', event => {
     if (event.key !== 'Backspace') return;
@@ -639,6 +640,8 @@ function installContextMenu() {
 function installGraphInteractions() {
   if (!cy || graphInteractionsCleanup) return;
   const setNodeAsRoot = node => {
+    clearTimeout(singleClickTimer);
+    singleClickTimer = 0;
     const holon = currentModel.holons.find(item => String(item.id) === String(node?.data?.('holonId')));
     if (!holon) return false;
     currentRootId = String(holon.id);
@@ -653,7 +656,11 @@ function installGraphInteractions() {
   };
   cy.on('tap', 'node', event => {
     const holon = currentModel.holons.find(item => String(item.id) === String(event.target.data('holonId')));
-    emitSelection(holon || null);
+    clearTimeout(singleClickTimer);
+    singleClickTimer = window.setTimeout(() => {
+      singleClickTimer = 0;
+      emitSelection(holon || null);
+    }, 400);
   });
   cy.on('dbltap', 'node', event => {
     setNodeAsRoot(event.target);
@@ -673,6 +680,8 @@ function installGraphInteractions() {
   };
   container?.addEventListener('dblclick', onNativeDoubleClick);
   graphInteractionsCleanup = () => {
+    clearTimeout(singleClickTimer);
+    singleClickTimer = 0;
     container?.removeEventListener('dblclick', onNativeDoubleClick);
     graphInteractionsCleanup = null;
   };
